@@ -41,8 +41,8 @@ public class SecurityConfig {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/api/users/auth/**", "/actuator/**", "/health/**", "/health", "/").permitAll()
-                        .anyExchange().permitAll()  // Allow all for now, JWT filter will handle auth
+                        .pathMatchers("/api/users/auth/**", "/").permitAll()
+                        .anyExchange().permitAll() 
                 )
                 .addFilterAt(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();

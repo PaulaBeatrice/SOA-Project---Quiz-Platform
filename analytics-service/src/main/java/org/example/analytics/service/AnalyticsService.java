@@ -17,18 +17,6 @@ public class AnalyticsService {
     @Autowired
     private AnalyticsEventRepository eventRepository;
 
-    public List<AnalyticsEvent> getAllEvents() {
-        return eventRepository.findAll();
-    }
-
-    public List<AnalyticsEvent> getEventsByType(String eventType) {
-        return eventRepository.findByEventType(eventType);
-    }
-
-    public List<AnalyticsEvent> getEventsByDateRange(LocalDateTime start, LocalDateTime end) {
-        return eventRepository.findByTimestampBetween(start, end);
-    }
-
     public Map<String, Object> getDashboardStats() {
         Map<String, Object> stats = new HashMap<>();
 
