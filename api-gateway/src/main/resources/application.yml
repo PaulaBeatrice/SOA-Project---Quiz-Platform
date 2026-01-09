@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: user-service
+          uri: http://user-service:8081
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - StripPrefix=1
+        - id: quiz-service
+          uri: http://quiz-service:8082
+          predicates:
+            - Path=/api/quiz-service/**
+          filters:
+            - StripPrefix=2
+        - id: submission-service
+          uri: http://submission-service:8083
+          predicates:
+            - Path=/api/submissions/**
+          filters:
+            - StripPrefix=1
+        - id: analytics-service
+          uri: http://analytics-service:8085
+          predicates:
+            - Path=/api/analytics/**
+          filters:
+            - StripPrefix=2
+        - id: notification-service
+          uri: http://notification-service:8084
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - StripPrefix=2
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:80"
+              - "http://localhost"
+              - "http://localhost:8080"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: false
+            exposedHeaders:
+              - "Authorization"
+
+server:
+  port: 8080
+
+jwt:
+  secret: your-secret-key-change-this-in-production-minimum-256-bits-required-for-hs256
+  expiration: 86400000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+

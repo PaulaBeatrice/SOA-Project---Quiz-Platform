@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: grading-function
+  rabbitmq:
+    host: rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+  amqp:
+    deserialization:
+      trust:
+        all: true
+
+server:
+  port: 9000
+
+quiz:
+  service:
+    url: http://quiz-service:8082
+

@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: kafka-consumer-service
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: kafka-consumer-group
+      auto-offset-reset: earliest
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+server:
+  port: 8086
+
+logging:
+  level:
+    root: INFO
+    org.example.kafkaconsumer: DEBUG

@@ -1,0 +1,212 @@
+version: '3.8'
+
+services:
+  # Infrastructure Services
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - D:\DockerData\postgres-data:/var/lib/postgresql/data
+      - D:\Proiecte\QuizPlatform\init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - quiz-network
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - D:\DockerData\mongo-data:/data/db
+    networks:
+      - quiz-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - quiz-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - quiz-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - quiz-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - quiz-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - D:\Proiecte\QuizPlatform\nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-gateway
+    networks:
+      - quiz-network
+  
+  frontend:
+    build:
+      context: D:\Proiecte\QuizPlatform\frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    networks:
+      - quiz-network
+
+  # Microservices
+  api-gateway:
+    build:
+      context: D:\Proiecte\QuizPlatform\api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    networks:
+      - quiz-network
+    depends_on:
+      - user-service
+      - quiz-service
+      - submission-service
+      - notification-service
+      - analytics-service
+
+  user-service:
+    build:
+      context: D:\Proiecte\QuizPlatform\user-service
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - quiz-network
+
+  quiz-service:
+    build:
+      context: D:\Proiecte\QuizPlatform\quiz-service
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+      - kafka
+      - rabbitmq
+    networks:
+      - quiz-network
+
+  submission-service:
+    build:
+      context: D:\Proiecte\QuizPlatform\submission-service
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+    depends_on:
+      - postgres
+      - kafka
+      - rabbitmq
+      - grading-function
+    networks:
+      - quiz-network
+
+  notification-service:
+    build:
+      context: D:\Proiecte\QuizPlatform\notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    depends_on:
+      - rabbitmq
+      - redis
+    networks:
+      - quiz-network
+
+  analytics-service:
+    build:
+      context: D:\Proiecte\QuizPlatform\analytics-service
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8085"
+    depends_on:
+      - mongodb
+      - kafka
+    networks:
+      - quiz-network
+
+  grading-function:
+    build:
+      context: D:\Proiecte\QuizPlatform\grading-function
+      dockerfile: Dockerfile
+    ports:
+      - "9000:9000"
+    depends_on:
+      - quiz-service
+    environment:
+      SPRING_AMQP_DESERIALIZATION_TRUST_ALL: "true"
+    networks:
+      - quiz-network
+
+  # Note: Kafka Event Consumer Service implementation available at kafka-consumer-service/
+  # Can be deployed separately or as part of existing microservices
+  # Currently Kafka events are consumed by submission-service for real-time processing
+
+  # Serverless Function Service (Report Generator)
+  report-generator-service:
+    image: python:3.11-alpine
+    working_dir: /app
+    volumes:
+      - D:\Proiecte\QuizPlatform\serverless-functions\report-generator:/app
+    command: python -m http.server 9001 --directory /app
+    ports:
+      - "9001:9001"
+    networks:
+      - quiz-network
+
+networks:
+  quiz-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: D:\DockerData\postgres-data
+  mongo-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: D:\DockerData\mongo-data
