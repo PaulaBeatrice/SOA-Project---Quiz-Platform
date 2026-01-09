@@ -122,7 +122,6 @@ A quiz platform demonstrating microservices architecture
 
 ---
 
-## Detailed Implementation
 
 ###  **Secured REST API **
 
