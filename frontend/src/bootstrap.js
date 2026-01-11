@@ -6,19 +6,14 @@ import NotificationService from './services/NotificationService';
 
 // Local components
 import Login from './components/Login';
-import Dashboard from './components/Dashboard';
-import Admin from './components/Admin';
-import QuizDetail from './components/QuizDetail';
-import StudentQuiz from './components/StudentQuiz';
 
-// Lazy load admin micro-frontend
+// Lazy load micro-frontend modules
+const DashboardModule = lazy(() => import('dashboard/Dashboard'));
+const QuizModule = lazy(() => import('quiz/QuizManager'));
 const AdminDashboard = lazy(() => import('admin/AdminDashboard').catch(() => {
   console.warn('Failed to load admin micro-frontend');
   return { default: () => <div style={{padding: '20px', textAlign: 'center'}}><h2>Admin Dashboard (Coming Soon)</h2></div> };
 }));
-
-// Placeholder components for module federation
-const QuizModule = () => <div style={{padding: '20px', textAlign: 'center'}}><h2>Quiz Module (Coming Soon)</h2><p>Quiz functionality will be available here.</p></div>;
 
 function App() {
   const [user, setUser] = useState(null);

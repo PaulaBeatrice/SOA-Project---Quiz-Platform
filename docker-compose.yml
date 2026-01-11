@@ -85,6 +85,34 @@ services:
     networks:
       - quiz-network
 
+  # Micro-frontends
+  dashboard-mfe:
+    build:
+      context: D:\Proiecte\QuizPlatform\frontend\micro-frontends\dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    networks:
+      - quiz-network
+
+  quiz-mfe:
+    build:
+      context: D:\Proiecte\QuizPlatform\frontend\micro-frontends\quiz
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    networks:
+      - quiz-network
+
+  admin-mfe:
+    build:
+      context: D:\Proiecte\QuizPlatform\frontend\micro-frontends\admin
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    networks:
+      - quiz-network
+
   # Microservices
   api-gateway:
     build:

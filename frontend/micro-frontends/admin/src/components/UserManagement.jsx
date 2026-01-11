@@ -1,5 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '@quiz-platform/shared-lib';
+import axios from 'axios';
+
+// Create axios instance with API base URL
+const api = axios.create({
+  baseURL: 'http://localhost:8080',
+});
+
+// Add token to all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 /**
  * UserManagement Component

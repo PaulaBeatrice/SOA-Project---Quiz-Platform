@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Routes, Route, Link, Navigate, BrowserRouter } from 'react-router-dom';
+import { Routes, Route, Link, Navigate } from 'react-router-dom';
 
 // Lazy load remote micro-frontend modules
 const DashboardModule = lazy(() => import('dashboard/Dashboard'));
