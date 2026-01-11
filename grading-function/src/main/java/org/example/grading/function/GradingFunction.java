@@ -75,15 +75,8 @@ public class GradingFunction {
             return false;
         }
 
-        // For multiple choice and true/false
-        if ("MULTIPLE_CHOICE".equals(question.getType()) || "TRUE_FALSE".equals(question.getType())) {
+        if ("MULTIPLE_CHOICE".equals(question.getType())) {
             return question.getCorrectAnswers().contains(answer);
-        }
-
-        // For short answer - exact match (case-insensitive)
-        if ("SHORT_ANSWER".equals(question.getType())) {
-            return question.getCorrectAnswers().stream()
-                .anyMatch(correct -> correct.trim().equalsIgnoreCase(answer.trim()));
         }
 
         return false;
