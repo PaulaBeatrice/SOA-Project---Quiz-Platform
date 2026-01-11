@@ -678,11 +678,47 @@ public class NotificationController {
 #### Webpack 5 Module Federation Configuration
 ```javascript
 // frontend/webpack.config.js
-const { ModuleFederationPlugin } = require('webpack').container;
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const { ModuleFederationPlugin } = require('webpack').container;
+const path = require('path');
 
 module.exports = {
+  entry: './src/index.js',
+  mode: 'development',
+  devServer: {
+    port: 3000,
+    historyApiFallback: {
+      rewrites: [
+        { from: /^(?!\/.*\.[^.]+$|.*\.js$|.*\.css$)/, to: '/' }
+      ]
+    },
+    hot: true,
+  },
+  output: {
+    publicPath: '/',
+    path: path.resolve(__dirname, 'dist'),
+    clean: true,
+  },
+  module: {
+    rules: [
+      {
+        test: /\.jsx?$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader',
+          options: {
+            presets: ['@babel/preset-react'],
+          },
+        },
+      },
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader'],
+      },
+    ],
+  },
   plugins: [
+    // Module Federation for Micro Frontend Architecture
     new ModuleFederationPlugin({
       name: 'shell',
       filename: 'remoteEntry.js',
@@ -716,56 +752,125 @@ module.exports = {
         },
       },
     }),
-    
     new HtmlWebpackPlugin({
-      template: './public/index.html'
-    })
-  ]
+      template: './public/index.html',
+    }),
+  ],
+  resolve: {
+    extensions: ['.js', '.jsx'],
+  },
 };
 ```
 
 #### Shell Application (Main App)
 ```jsx
 // frontend/src/App.jsx
-import React, { Suspense, lazy, useState } from 'react';
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import { Routes, Route, Link, Navigate } from 'react-router-dom';
 
-// Lazy load remote modules
-const Dashboard = lazy(() => import('dashboard/Dashboard'));
+// Lazy load remote micro-frontend modules
+const DashboardModule = lazy(() => import('dashboard/Dashboard'));
 const QuizModule = lazy(() => import('quiz/QuizManager'));
-const AdminPanel = lazy(() => import('admin/AdminDashboard'));
+const AdminModule = lazy(() => import('admin/AdminDashboard'));
 
-export default function App() {
+// Local pages
+import Login from './components/Login';
+import NotificationService from './services/NotificationService';
+
+/**
+ * Shell Application - Main App Container
+ * Loads micro-frontends based on user role and route
+ */
+function App() {
   const [user, setUser] = useState(null);
-  
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Unified notification handler - single callback for ALL notifications
+  const handleNotification = useCallback((notification) => {
+    console.log('🔔 [App] Notification received:', notification);
+    const notifWithId = { ...notification, id: Date.now() };
+    setNotifications(prev => [...prev, notifWithId]);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== notifWithId.id));
+    }, 5000);
+  }, []);
+
+  // Restore user session on mount and connect to WebSocket
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const username = localStorage.getItem('username');
+    const role = localStorage.getItem('role');
+    const userId = localStorage.getItem('userId');
+
+    if (token && username && userId) {
+      const userData = { 
+        id: parseInt(userId), 
+        username, 
+        role,
+        firstName: localStorage.getItem('firstName'),
+        lastName: localStorage.getItem('lastName'),
+        token 
+      };
+      setUser(userData);
+      
+      // Connect to notification service
+      NotificationService.connect(username, handleNotification);
+    }
+    setLoading(false);
+  }, [handleNotification]);
+
+  if (loading) return <div>Loading...</div>;
+  if (!user) return <Login onLogin={setUser} />;
+
   return (
-    <BrowserRouter>
-      <div className="app">
-        <nav className="navbar">
-          <h1>Quiz Platform</h1>
-          <div className="nav-links">
-            <Link to="/">Dashboard</Link>
-            {user?.role === 'TEACHER' && <Link to="/quizzes">Manage Quizzes</Link>}
-            {user?.role === 'ADMIN' && <Link to="/admin">Admin Panel</Link>}
+    <div className="app">
+      <nav className="navbar">
+        <h1>Quiz Platform</h1>
+        <div className="nav-links">
+          <Link to="/">Dashboard</Link>
+          {user?.role === 'TEACHER' && <Link to="/quizzes">Manage Quizzes</Link>}
+          {user?.role === 'ADMIN' && <Link to="/admin">Admin Panel</Link>}
+          <button onClick={handleLogout}>Logout</button>
+        </div>
+      </nav>
+      
+      {/* Notification Display */}
+      <div className="notifications">
+        {notifications.map(notif => (
+          <div key={notif.id} className="notification-toast">
+            {notif.message}
           </div>
-        </nav>
-        
-        <Suspense fallback={<div>Loading module...</div>}>
-          <Routes>
-            <Route path="/" element={<Dashboard user={user} />} />
-            <Route path="/quizzes/*" element={<QuizModule user={user} />} />
-            <Route path="/admin/*" element={<AdminPanel user={user} />} />
-          </Routes>
-        </Suspense>
+        ))}
       </div>
-    </BrowserRouter>
+      
+      {/* Micro-Frontend Routes */}
+      <Suspense fallback={<div className="loading">Loading module...</div>}>
+        <Routes>
+          <Route path="/" element={<DashboardModule user={user} />} />
+          <Route path="/quizzes/*" element={user?.role === 'TEACHER' ? <QuizModule user={user} /> : <Navigate to="/" />} />
+          <Route path="/admin/*" element={user?.role === 'ADMIN' ? <AdminModule user={user} /> : <Navigate to="/" />} />
+        </Routes>
+      </Suspense>
+    </div>
   );
 }
+
+export default App;
 ```
 
-#### Shared Library
+**Key Features:**
+- **Lazy Loading**: Remote modules loaded only when needed
+- **Unified Notification Handler**: Single callback manages all WebSocket notifications
+- **Role-Based Access**: Dashboard access for all, Quizzes for TEACHERS, Admin panel for ADMINS
+- **Session Persistence**: User session restored from localStorage
+- **Error Handling**: Graceful fallback if micro-frontend fails to load
+
+#### Shared Services
 ```javascript
-// micro-frontends/shared-lib/src/api.js
+// frontend/src/services/api.js
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
@@ -774,8 +879,7 @@ export const api = axios.create({
   baseURL: API_BASE_URL,
 });
 
-
-// Add token to all requests
+// Add JWT token to all requests
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -785,6 +889,70 @@ api.interceptors.request.use(config => {
 });
 
 export default api;
+```
+
+```javascript
+// frontend/src/services/NotificationService.js
+import SockJS from 'sockjs-client';
+import Stomp from 'stompjs';
+
+class NotificationService {
+  constructor() {
+    this.stompClient = null;
+    this.username = null;
+    this.notificationCallback = null;
+  }
+
+  connect(username, onMessageCallback) {
+    return new Promise((resolve, reject) => {
+      this.username = username;
+      this.notificationCallback = onMessageCallback;
+
+      const socket = new SockJS('http://localhost:8084/ws');
+      this.stompClient = Stomp.over(socket);
+
+      this.stompClient.connect({}, (frame) => {
+        console.log('🔗 Connected:', frame);
+
+        // Subscribe to personal queue (grading results, personal notifications)
+        this.stompClient.subscribe(
+          `/user/${username}/queue/grading-result`,
+          (message) => {
+            const notification = JSON.parse(message.body);
+            this.notificationCallback(notification);
+          }
+        );
+
+        // Subscribe to broadcast channel (new quizzes, system announcements)
+        this.stompClient.subscribe('/topic/quizzes', (message) => {
+          const notification = JSON.parse(message.body);
+          this.notificationCallback(notification);
+        });
+
+        resolve();
+      }, (error) => {
+        console.error('❌ WebSocket connection error:', error);
+        reject(error);
+      });
+    });
+  }
+
+  disconnect() {
+    if (this.stompClient && this.stompClient.connected) {
+      this.stompClient.disconnect(() => {
+        console.log('Disconnected');
+      });
+    }
+  }
+
+  sendMessage(destination, message) {
+    if (this.stompClient && this.stompClient.connected) {
+      this.stompClient.send(destination, {}, JSON.stringify(message));
+    }
+  }
+}
+
+export default new NotificationService();
 ```
 ---
 
@@ -1054,14 +1222,27 @@ docker-compose up -d
 
 The frontend uses Webpack Module Federation for true micro-frontend architecture:
 
-### Host Application (Port 3000)
-- Main shell application
-- Loads remote micro-frontends dynamically
-- Handles authentication and routing
+### Shell Application (Port 3000)
+- Main host application container
+- Loads Dashboard, Quiz, and Admin micro-frontends dynamically
+- Handles user authentication and session management
+- Unified WebSocket notification handler
+- Role-based routing and access control
 
-### Quiz Module (Port 3001)
-- Independent deployable quiz-taking interface
-- Can be developed and deployed separately
+### Micro-Frontends (Independently Deployed)
+**Dashboard Module** (Port 3001)
+- User dashboard with quiz statistics
+- Performance analytics and results history
+
+**Quiz Module** (Port 3002)
+- Quiz creation and management (TEACHER role)
+- Quiz-taking interface (STUDENT role)
+- Question management and editing
+
+**Admin Module** (Port 3003)
+- System administration interface (ADMIN role)
+- User management and monitoring
+- Platform settings and configurations
 
 
 ## Project Structure
@@ -1417,25 +1598,26 @@ QuizPlatform/
 │   ├── src/main/java/.../listener/SubmissionEventListener.java
 │   └── Dockerfile
 │
-├── frontend/                       # React Application
+├── frontend/                       # Shell Application (Webpack 5 Module Federation)
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── QuizDetail.jsx
-│   │   │   ├── StudentQuiz.jsx
+│   │   │   └── Login.jsx               # Authentication component
 │   │   ├── services/
-│   │   │   ├── api.js             # Axios API client
-│   │   │   └── NotificationService.js  # WebSocket client
-│   │   ├── micro-frontends/
-│   │   │   ├── dashboard/
-│   │   │   ├── quiz/
-│   │   │   ├── admin/
-│   │   │   └── shared-lib/
-│   │   ├── App.jsx
-│   │   └── bootstrap.js
-│   ├── webpack.config.js          # Module Federation config
-│   ├── package.json
-│   └── Dockerfile
+│   │   │   ├── api.js                  # Axios client with JWT interceptor
+│   │   │   └── NotificationService.js  # WebSocket STOMP client
+│   │   ├── App.jsx                     # Main shell application with role-based routing
+│   │   ├── bootstrap.js                # Entry point
+│   │   └── styles.css                  # Global styles
+│   ├── public/
+│   │   └── index.html                  # HTML template
+│   ├── micro-frontends/                # Separate micro-frontend modules
+│   │   ├── dashboard/                  # Dashboard micro-frontend
+│   │   ├── quiz/                       # Quiz management micro-frontend
+│   │   ├── admin/                      # Admin panel micro-frontend
+│   │   └── shared-lib/                 # Shared utilities and constants
+│   ├── webpack.config.js               # Webpack 5 Module Federation config
+│   ├── package.json                    # Dependencies and scripts
+│   └── Dockerfile                      # Container image
 │
 ├── nginx/                          # Load Balancer & Reverse Proxy
 │   ├── nginx.conf                 # Configuration

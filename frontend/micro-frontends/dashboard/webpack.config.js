@@ -52,8 +52,7 @@ module.exports = {
       filename: 'remoteEntry.js',
       exposes: {
         './Dashboard': './src/Dashboard.jsx',
-        './StudentDashboard': './src/components/StudentDashboard.jsx',
-        './TeacherDashboard': './src/components/TeacherDashboard.jsx'
+        './StudentDashboard': './src/components/StudentDashboard.jsx'
       },
       shared: {
         react: { singleton: true, requiredVersion: '^18.0.0' },

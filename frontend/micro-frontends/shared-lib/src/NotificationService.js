@@ -13,7 +13,7 @@ class NotificationService {
     try {
       if (onMessageReceived && !this.messageCallbacks.includes(onMessageReceived)) {
         this.messageCallbacks.push(onMessageReceived);
-        console.log('✓ Callback registered, total callbacks:', this.messageCallbacks.length);
+        console.log(' Callback registered, total callbacks:', this.messageCallbacks.length);
       }
 
       if (this.client && this.connected) {

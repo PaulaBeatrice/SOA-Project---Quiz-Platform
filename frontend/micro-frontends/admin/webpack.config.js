@@ -51,9 +51,7 @@ module.exports = {
       name: 'admin',
       filename: 'remoteEntry.js',
       exposes: {
-        './AdminDashboard': './src/AdminDashboard.jsx',
-        './UserManagement': './src/components/UserManagement.jsx',
-        './SystemSettings': './src/components/SystemSettings.jsx'
+        './AdminDashboard': './src/AdminDashboard.jsx'
       },
       shared: {
         react: { singleton: true, requiredVersion: '^18.0.0' },

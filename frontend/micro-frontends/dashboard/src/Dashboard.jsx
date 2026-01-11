@@ -55,9 +55,9 @@ export default function Dashboard({ user }) {
         const submissionsRes = await api.get(`/api/submissions/user/${user.id}`);
         submissionsData = submissionsRes.data || [];
         setSubmissions(submissionsData);
-        console.log('✅ Loaded submissions for user ' + user.id + ':', submissionsData);
+        console.log('Loaded submissions for user ' + user.id + ':', submissionsData);
       } catch (err) {
-        console.error('❌ ERROR loading submissions:', err.response?.status, err.response?.data, err.message);
+        console.error('ERROR loading submissions:', err.response?.status, err.response?.data, err.message);
         setSubmissions([]);
       }
 
@@ -91,7 +91,7 @@ export default function Dashboard({ user }) {
   // Load data on component mount
   useEffect(() => {
     if (user && user.id) {
-      console.log('📊 Loading dashboard data for user:', user.username);
+      console.log('Loading dashboard data for user:', user.username);
       loadDashboardData();
     }
   }, [user, loadDashboardData]);

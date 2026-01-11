@@ -22,7 +22,7 @@ function App() {
   // Initialize global quiz event queue if not exists
   if (!window.quizEventQueue) {
     window.quizEventQueue = [];
-    console.log('🔔 [App] Initialized global quiz event queue');
+    console.log('[App] Initialized global quiz event queue');
   }
 
   // Restore user session on mount
@@ -50,27 +50,27 @@ function App() {
   }, [handleNotification]);
 
   const handleNotification = useCallback((notification) => {
-    console.log('🔔 [App] Notification received:', notification);
+    console.log('[App] Notification received:', notification);
     
     // Dispatch event for quiz updates (this is the priority)
     try {
       const eventType = notification?.type || notification?.eventType;
-      console.log('🔔 [App] Event type:', eventType);
+      console.log('[App] Event type:', eventType);
       
       if (eventType === 'QUIZ_CREATED' || eventType === 'QUIZ_DELETED' || eventType === 'QUIZ_UPDATED') {
-        console.log('🔔 [App] ✅ Quiz event detected - queuing and dispatching');
+        console.log('[App] Quiz event detected - queuing and dispatching');
         
         // Queue event globally so QuizManager can fetch it even if not mounted yet
         const event = { type: eventType, timestamp: Date.now(), data: notification };
         window.quizEventQueue.push(event);
-        console.log('🔔 [App] Event queued, queue length:', window.quizEventQueue.length);
+        console.log(' [App] Event queued, queue length:', window.quizEventQueue.length);
         
         // Also dispatch custom event for immediate handling if listener exists
         window.dispatchEvent(new CustomEvent('quiz-event', { detail: event }));
-        console.log('🔔 [App] ✅ Custom event dispatched');
+        console.log(' [App] Custom event dispatched');
       }
     } catch (err) {
-      console.error('🔔 [App] Error dispatching event:', err);
+      console.error(' [App] Error dispatching event:', err);
     }
     
     // Separately, handle notification UI (with error handling)
@@ -81,7 +81,7 @@ function App() {
         setNotifications(prev => prev.filter(n => n.id !== notifWithId.id));
       }, 5000);
     } catch (err) {
-      console.error('🔔 [App] Error updating notifications:', err);
+      console.error(' [App] Error updating notifications:', err);
     }
   }, []);
 
@@ -119,25 +119,25 @@ function App() {
       {/* Top Navigation Bar */}
       <nav className="navbar">
         <div className="navbar-brand">
-          <h1>📚 Quiz Platform</h1>
+          <h1> Quiz Platform</h1>
         </div>
 
         <div className="navbar-menu">
           {user.role !== 'ADMIN' && (
             <Link to="/" className="nav-link">
-              🏠 Dashboard
+               Dashboard
             </Link>
           )}
 
           {(user.role === 'STUDENT' || user.role === 'TEACHER') && (
             <Link to="/quizzes" className="nav-link">
-              📝 Quizzes
+              Quizzes
             </Link>
           )}
 
           {user.role === 'ADMIN' && (
             <Link to="/admin" className="nav-link">
-              🛠️ Admin Panel
+               Admin Panel
             </Link>
           )}
         </div>
@@ -147,7 +147,7 @@ function App() {
             {user.firstName} {user.lastName} ({user.role})
           </span>
           <button onClick={handleLogout} className="logout-btn">
-            🚪 Logout
+             Logout
           </button>
         </div>
       </nav>

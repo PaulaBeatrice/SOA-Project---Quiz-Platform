@@ -1,11 +1,6 @@
 import { useState } from 'react';
 import UserManagement from './components/UserManagement';
-import SystemSettings from './components/SystemSettings';
 
-/**
- * AdminDashboard Component
- * Main admin panel with system-wide management capabilities
- */
 export default function AdminDashboard({ user }) {
   const [activeTab, setActiveTab] = useState('users');
 
