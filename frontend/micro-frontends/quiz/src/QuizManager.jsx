@@ -31,23 +31,61 @@ export default function QuizManager({ user }) {
   const [selectedQuizId, setSelectedQuizId] = useState(null);
 
   useEffect(() => {
-    loadQuizzes();
+    console.log('📋 [QuizManager] useEffect mounted, loading quizzes');
+    
+    // Check if there are queued events from before this component mounted
+    if (window.quizEventQueue && window.quizEventQueue.length > 0) {
+      console.log('📋 [QuizManager] Found', window.quizEventQueue.length, 'queued quiz events');
+      // Clear queue and reload
+      window.quizEventQueue = [];
+      loadQuizzes();
+    } else {
+      loadQuizzes();
+    }
+
+    // Listen for custom quiz events dispatched by main app
+    // This works within the same tab/window where quiz-mfe is loaded as a module federation component
+    const handleQuizEvent = (event) => {
+      console.log('📋 [QuizManager] ✅ Quiz event received from main app:', event.detail);
+      console.log('📋 [QuizManager] Event type:', event.detail?.type);
+      // Immediately refresh quiz list when event is received
+      console.log('📋 [QuizManager] Calling loadQuizzes()');
+      loadQuizzes();
+    };
+
+    window.addEventListener('quiz-event', handleQuizEvent);
+    console.log('📋 [QuizManager] Listener attached for quiz-event');
+
+    // Also use polling as fallback (2 seconds for responsiveness)
+    const pollInterval = setInterval(() => {
+      console.log('📋 [QuizManager] Polling loadQuizzes (2 second interval)');
+      loadQuizzes();
+    }, 2000);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('quiz-event', handleQuizEvent);
+      clearInterval(pollInterval);
+    };
   }, []);
 
   const loadQuizzes = async () => {
     try {
+      console.log('📋 [QuizManager] loadQuizzes called');
       setLoading(true);
       // Fetch quizzes through API Gateway
       // Routes: /api/quiz-service/quizzes -> quiz-service:8082
       const response = await api.get('/api/quiz-service/quizzes');
+      console.log('📋 [QuizManager] Quizzes loaded, count:', response.data?.length || 0);
       setQuizzes(response.data);
       // For now, teachers can see all quizzes as "their" quizzes
       // In a real app, you'd filter by teacher ID
       if (user?.role === 'TEACHER') {
+        console.log('📋 [QuizManager] User is TEACHER, setting myQuizzes');
         setMyQuizzes(response.data);
       }
     } catch (error) {
-      console.error('Error loading quizzes:', error);
+      console.error('📋 [QuizManager] ❌ Error loading quizzes:', error);
     } finally {
       setLoading(false);
     }

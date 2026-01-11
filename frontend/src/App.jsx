@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Routes, Route, Link, Navigate } from 'react-router-dom';
 
 // Lazy load remote micro-frontend modules
@@ -18,6 +18,12 @@ function App() {
   const [user, setUser] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Initialize global quiz event queue if not exists
+  if (!window.quizEventQueue) {
+    window.quizEventQueue = [];
+    console.log('🔔 [App] Initialized global quiz event queue');
+  }
 
   // Restore user session on mount
   useEffect(() => {
@@ -41,17 +47,43 @@ function App() {
       NotificationService.connect(username, handleNotification);
     }
     setLoading(false);
-  }, []);
+  }, [handleNotification]);
 
-  const handleNotification = (notification) => {
-    const notifWithId = { ...notification, id: Date.now() };
-    setNotifications(prev => [...prev, notifWithId]);
+  const handleNotification = useCallback((notification) => {
+    console.log('🔔 [App] Notification received:', notification);
     
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== notifWithId.id));
-    }, 5000);
-  };
+    // Dispatch event for quiz updates (this is the priority)
+    try {
+      const eventType = notification?.type || notification?.eventType;
+      console.log('🔔 [App] Event type:', eventType);
+      
+      if (eventType === 'QUIZ_CREATED' || eventType === 'QUIZ_DELETED' || eventType === 'QUIZ_UPDATED') {
+        console.log('🔔 [App] ✅ Quiz event detected - queuing and dispatching');
+        
+        // Queue event globally so QuizManager can fetch it even if not mounted yet
+        const event = { type: eventType, timestamp: Date.now(), data: notification };
+        window.quizEventQueue.push(event);
+        console.log('🔔 [App] Event queued, queue length:', window.quizEventQueue.length);
+        
+        // Also dispatch custom event for immediate handling if listener exists
+        window.dispatchEvent(new CustomEvent('quiz-event', { detail: event }));
+        console.log('🔔 [App] ✅ Custom event dispatched');
+      }
+    } catch (err) {
+      console.error('🔔 [App] Error dispatching event:', err);
+    }
+    
+    // Separately, handle notification UI (with error handling)
+    try {
+      const notifWithId = { ...notification, id: Date.now() };
+      setNotifications(prev => [...prev, notifWithId]);
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== notifWithId.id));
+      }, 5000);
+    } catch (err) {
+      console.error('🔔 [App] Error updating notifications:', err);
+    }
+  }, []);
 
   const handleLogin = (userData) => {
     setUser(userData);

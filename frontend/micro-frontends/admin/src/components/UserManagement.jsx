@@ -83,7 +83,6 @@ export default function UserManagement() {
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
-              <th>Status</th>
               <th>Joined</th>
               <th>Actions</th>
             </tr>
@@ -91,7 +90,7 @@ export default function UserManagement() {
           <tbody>
             {users.map((user) => (
               <tr key={user.id}>
-                <td>{user.firstName} {user.lastName}</td>
+                <td>{user.firstName ? `${user.firstName} ${user.lastName}` : user.username}</td>
                 <td>{user.email}</td>
                 <td>
                   <select
@@ -103,11 +102,6 @@ export default function UserManagement() {
                     <option value="TEACHER">Teacher</option>
                     <option value="ADMIN">Admin</option>
                   </select>
-                </td>
-                <td>
-                  <span className={user.isActive ? 'active' : 'inactive'}>
-                    {user.isActive ? ' Active' : ' Inactive'}
-                  </span>
                 </td>
                 <td>{new Date(user.createdAt).toLocaleDateString()}</td>
                 <td>
@@ -165,16 +159,6 @@ export default function UserManagement() {
           border: 1px solid #e0e0e0;
           border-radius: 4px;
           font-size: 13px;
-        }
-
-        .active {
-          color: green;
-          font-weight: 600;
-        }
-
-        .inactive {
-          color: orange;
-          font-weight: 600;
         }
 
         .delete-btn {

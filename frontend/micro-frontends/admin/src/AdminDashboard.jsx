@@ -17,7 +17,7 @@ export default function AdminDashboard({ user }) {
     <div className="admin-dashboard">
       <div className="admin-header">
         <h2> System Administration</h2>
-        <p className="admin-user">Logged in as: {user.firstName} {user.lastName}</p>
+        <p className="admin-user">Logged in as admin {user.firstName} {user.lastName}</p>
       </div>
 
       <div className="admin-tabs">
@@ -27,17 +27,10 @@ export default function AdminDashboard({ user }) {
         >
            User Management
         </button>
-        <button
-          className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('settings')}
-        >
-           System Settings
-        </button>
       </div>
 
       <div className="admin-content">
         {activeTab === 'users' && <UserManagement />}
-        {activeTab === 'settings' && <SystemSettings />}
       </div>
 
       <style>{`
