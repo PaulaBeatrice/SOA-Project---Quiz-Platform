@@ -7,7 +7,7 @@ module.exports = {
   entry: './src/index.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: '[name].[contenthash].js',
+    filename: '[name].js',
     publicPath: 'auto',
     clean: true
   },
@@ -16,7 +16,11 @@ module.exports = {
   },
   devServer: {
     port: 3002,
-    historyApiFallback: true,
+    historyApiFallback: {
+      rewrites: [
+        { from: /^(?!\/.*\.[^.]+$|.*\.js$|.*\.css$)/, to: '/' }
+      ]
+    },
     headers: {
       'Access-Control-Allow-Origin': '*'
     }

@@ -1,226 +1,341 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '@quiz-platform/shared-lib';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
-export default function TakeQuiz({ quizId, onComplete }) {
+// Create axios instance with API base URL
+const api = axios.create({
+  baseURL: 'http://localhost:8080',
+});
+
+// Add token to all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+const quizAPI = {
+  getById: (id) => api.get(`/api/quiz-service/quizzes/${id}`),
+};
+
+const submissionAPI = {
+  start: (quizId, userId) =>
+    api.post(`/api/submissions/start?quizId=${quizId}&userId=${userId}`),
+
+  submit: (submissionId, answers) =>
+    api.post(`/api/submissions/${submissionId}/submit`, answers),
+};
+
+export default function TakeQuiz({ quizId, user }) {
+  const navigate = useNavigate();
   const [quiz, setQuiz] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [answers, setAnswers] = useState({});
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submissionScore, setSubmissionScore] = useState(0);
+  const [submissionId, setSubmissionId] = useState(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
   useEffect(() => {
-    loadQuiz();
+    if (quizId) {
+      fetchQuiz();
+    }
   }, [quizId]);
 
-  useEffect(() => {
-    if (!timeRemaining || submitted) return;
-    
-    const timer = setInterval(() => {
-      setTimeRemaining(time => {
-        if (time <= 1) {
-          handleSubmit();
-          return 0;
-        }
-        return time - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeRemaining, submitted]);
-
-  const loadQuiz = async () => {
+  const fetchQuiz = async () => {
     try {
-      const response = await api.get(`/quizzes/${quizId}`);
+      setLoading(true);
+      const response = await quizAPI.getById(quizId);
       setQuiz(response.data);
-      setTimeRemaining(response.data.timeLimit * 60);
-    } catch (error) {
-      console.error('Error loading quiz:', error);
+      setError('');
+
+      // Initialize answers object
+      const initialAnswers = {};
+      if (response.data.questions) {
+        response.data.questions.forEach((q) => {
+          initialAnswers[q.id] = null;
+        });
+      }
+      setAnswers(initialAnswers);
+    } catch (err) {
+      console.error('Error fetching quiz:', err);
+      setError('Failed to load quiz. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAnswerChange = (questionId, answer) => {
-    setAnswers(prev => ({
+  const handleAnswerSelect = (questionId, optionIndex) => {
+    setAnswers((prev) => ({
       ...prev,
-      [questionId]: answer
+      [questionId]: optionIndex,
     }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmitQuiz = async (e) => {
+    e.preventDefault();
     try {
-      await api.post(`/submissions/${quizId}/submit`, { answers });
+      // Validate that user ID is available
+      if (!user || !user.id) {
+        setError('User ID is not available. Please log in again.');
+        console.error('User or user.id is missing:', user);
+        return;
+      }
+
+      // Check if all questions are answered
+      const unanswered = quiz.questions.filter((q) => answers[q.id] === null);
+      if (unanswered.length > 0) {
+        setError(`Please answer all ${unanswered.length} question(s) before submitting.`);
+        return;
+      }
+
+      console.log('Submitting quiz with userId:', user.id, 'quizId:', quiz.id);
+
+      // First, start a submission to get a submission ID
+      const startResponse = await submissionAPI.start(quiz.id, user.id);
+      const submissionId = startResponse.data.id;
+      setSubmissionId(submissionId);
+
+      // Calculate score
+      let correctCount = 0;
+      quiz.questions.forEach((question) => {
+        if (answers[question.id] === question.correctOptionIndex) {
+          correctCount++;
+        }
+      });
+
+      const score = Math.round((correctCount / quiz.questions.length) * 100);
+
+      // Convert answers to the format expected by the backend (questionId -> answer string/text)
+      const answersPayload = {};
+      console.log('📝 Converting answers to text format...');
+      console.log('Raw answers:', answers);
+      Object.keys(answers).forEach((questionId) => {
+        const answerIndex = answers[questionId];
+        // Find the question to get the actual answer text from options
+        const question = quiz.questions.find((q) => q.id === parseInt(questionId));
+        if (question && answerIndex !== null) {
+          // Store the actual answer text, not the index
+          const answerText = question.options[answerIndex];
+          answersPayload[questionId] = answerText;
+          console.log(`  Q${questionId}: index=${answerIndex} → text="${answerText}" (options: ${JSON.stringify(question.options)})`);
+        }
+      });
+      console.log('Final answers payload:', answersPayload);
+
+      // Now submit the quiz with the submission ID
+      const submitResponse = await submissionAPI.submit(submissionId, answersPayload);
+
+      console.log('Quiz submitted successfully:', submitResponse.data);
+      setSubmissionScore(score);
       setSubmitted(true);
-      if (onComplete) onComplete();
-    } catch (error) {
-      console.error('Error submitting quiz:', error);
+      setError('');
+    } catch (err) {
+      console.error('Error submitting quiz:', err);
+      setError('Failed to submit quiz. Please try again.');
     }
   };
 
-  if (!quiz) return <div>Loading quiz...</div>;
-  if (submitted) return <div className="success"> Quiz submitted successfully!</div>;
 
-  const question = quiz.questions[currentQuestion];
-  const minutes = Math.floor(timeRemaining / 60);
-  const seconds = timeRemaining % 60;
+  if (loading) return <div style={{ padding: '20px' }}>Loading quiz...</div>;
+
+  if (!quiz) return <div style={{ padding: '20px' }}>Quiz not found</div>;
+
+  if (submitted) {
+    const handleBackToDashboard = () => {
+      // Navigate back to quiz manager
+      navigate('/quizzes', { state: { refreshSubmissions: true } });
+    };
+
+    return (
+      <div style={{ padding: '20px', textAlign: 'center' }}>
+        <div style={{
+          padding: '40px',
+          backgroundColor: '#d4edda',
+          borderRadius: '5px',
+          maxWidth: '500px',
+          margin: '50px auto'
+        }}>
+          <h2 style={{ color: '#155724', marginBottom: '20px' }}>Quiz Submitted!</h2>
+          <div style={{
+            fontSize: '2em',
+            fontWeight: 'bold',
+            color: '#155724',
+            marginBottom: '20px'
+          }}>
+            Your Score: {submissionScore}%
+          </div>
+          <p style={{ color: '#155724', fontSize: '1.1em', marginBottom: '20px' }}>
+            Thank you for taking the quiz.
+          </p>
+          <button
+            onClick={handleBackToDashboard}
+            style={{
+              marginTop: '20px',
+              padding: '10px 20px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer'
+            }}
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentQuestion = quiz.questions ? quiz.questions[currentQuestionIndex] : null;
+  const totalQuestions = quiz.questions ? quiz.questions.length : 0;
 
   return (
-    <div className="take-quiz">
-      <div className="quiz-header">
-        <h2>{quiz.title}</h2>
-        <div className="timer" style={{ color: timeRemaining < 60 ? 'red' : 'black' }}>
-           {minutes}:{seconds.toString().padStart(2, '0')}
+    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+      <div style={{
+        padding: '20px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '5px',
+        marginBottom: '20px'
+      }}>
+        <h1>{quiz.title}</h1>
+        <p style={{ color: '#666' }}>{quiz.description}</p>
+        <div style={{ fontSize: '0.9em', color: '#999' }}>
+          <p>Duration: {quiz.timeLimit || 'Unlimited'} minutes</p>
+          <p>Total Questions: {totalQuestions}</p>
         </div>
       </div>
 
-      <div className="progress">
-        <div className="progress-bar">
-          <div 
-            className="progress-fill" 
-            style={{ width: `${((currentQuestion + 1) / quiz.questions.length) * 100}%` }}
-          />
+      {error && (
+        <div style={{
+          padding: '10px',
+          marginBottom: '20px',
+          backgroundColor: '#f8d7da',
+          color: '#721c24',
+          borderRadius: '5px'
+        }}>
+          {error}
         </div>
-        <p>Question {currentQuestion + 1} of {quiz.questions.length}</p>
-      </div>
+      )}
 
-      <div className="question-container">
-        <h3>{question.text}</h3>
-        
-        {question.type === 'MULTIPLE_CHOICE' && (
-          <div className="options">
-            {question.options.map((option, index) => (
-              <label key={index} className="option">
-                <input
-                  type="radio"
-                  name={`question-${question.id}`}
-                  value={option}
-                  checked={answers[question.id] === option}
-                  onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                />
-                {option}
-              </label>
-            ))}
+      {currentQuestion && (
+        <form onSubmit={handleSubmitQuiz} style={{
+          padding: '20px',
+          backgroundColor: '#fff',
+          border: '1px solid #ddd',
+          borderRadius: '5px'
+        }}>
+          <div style={{ marginBottom: '30px' }}>
+            <div style={{
+              marginBottom: '20px',
+              padding: '10px',
+              backgroundColor: '#e7f3ff',
+              borderRadius: '5px'
+            }}>
+              <strong>Question {currentQuestionIndex + 1} of {totalQuestions}</strong>
+            </div>
+
+            <h3 style={{ marginBottom: '20px' }}>{currentQuestion.text}</h3>
+
+            <div style={{ marginBottom: '20px' }}>
+              {currentQuestion.options && currentQuestion.options.map((option, index) => (
+                <label key={index} style={{
+                  display: 'block',
+                  padding: '12px',
+                  marginBottom: '10px',
+                  backgroundColor: answers[currentQuestion.id] === index ? '#d1ecf1' : '#f9f9f9',
+                  border: answers[currentQuestion.id] === index ? '2px solid #0c5460' : '1px solid #ddd',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}>
+                  <input
+                    type="radio"
+                    name={`question-${currentQuestion.id}`}
+                    value={index}
+                    checked={answers[currentQuestion.id] === index}
+                    onChange={() => handleAnswerSelect(currentQuestion.id, index)}
+                    style={{ marginRight: '10px', cursor: 'pointer' }}
+                  />
+                  {option}
+                </label>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
 
-      <div className="navigation">
-        <button 
-          onClick={() => setCurrentQuestion(prev => Math.max(0, prev - 1))}
-          disabled={currentQuestion === 0}
-        >
-          ← Previous
-        </button>
-        
-        {currentQuestion < quiz.questions.length - 1 ? (
-          <button onClick={() => setCurrentQuestion(prev => prev + 1)}>
-            Next →
-          </button>
-        ) : (
-          <button onClick={handleSubmit} className="submit">
-            Submit Quiz
-          </button>
-        )}
-      </div>
+          <div style={{
+            display: 'flex',
+            gap: '10px',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: '30px',
+            paddingTop: '20px',
+            borderTop: '1px solid #ddd'
+          }}>
+            <div>
+              {currentQuestionIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentQuestionIndex(currentQuestionIndex - 1)}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ← Previous
+                </button>
+              )}
+            </div>
 
-      <style>{`
-        .take-quiz {
-          padding: 20px;
-          max-width: 800px;
-          margin: 0 auto;
-        }
+            <div style={{
+              fontSize: '0.9em',
+              color: '#666'
+            }}>
+              Question {currentQuestionIndex + 1} of {totalQuestions}
+            </div>
 
-        .quiz-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-
-        .timer {
-          font-size: 24px;
-          font-weight: bold;
-        }
-
-        .progress-bar {
-          width: 100%;
-          height: 10px;
-          background: #e0e0e0;
-          border-radius: 5px;
-          overflow: hidden;
-          margin-bottom: 10px;
-        }
-
-        .progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-          transition: width 0.3s;
-        }
-
-        .question-container {
-          background: white;
-          padding: 20px;
-          border-radius: 8px;
-          margin: 20px 0;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .options {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          margin-top: 15px;
-        }
-
-        .option {
-          display: flex;
-          align-items: center;
-          padding: 10px;
-          border: 2px solid #e0e0e0;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: border-color 0.3s;
-        }
-
-        .option:hover {
-          border-color: #667eea;
-        }
-
-        .option input {
-          margin-right: 10px;
-        }
-
-        .navigation {
-          display: flex;
-          gap: 10px;
-          justify-content: space-between;
-          margin-top: 20px;
-        }
-
-        .navigation button {
-          padding: 10px 20px;
-          border: none;
-          border-radius: 4px;
-          background: #667eea;
-          color: white;
-          cursor: pointer;
-          font-weight: 600;
-        }
-
-        .navigation button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .navigation button.submit {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .success {
-          text-align: center;
-          padding: 40px;
-          font-size: 24px;
-          color: green;
-        }
-      `}</style>
+            <div>
+              {currentQuestionIndex < totalQuestions - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setCurrentQuestionIndex(currentQuestionIndex + 1)}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Next →
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Submit Quiz
+                </button>
+              )}
+            </div>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

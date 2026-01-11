@@ -91,9 +91,11 @@ function App() {
         </div>
 
         <div className="navbar-menu">
-          <Link to="/" className="nav-link">
-            🏠 Dashboard
-          </Link>
+          {user.role !== 'ADMIN' && (
+            <Link to="/" className="nav-link">
+              🏠 Dashboard
+            </Link>
+          )}
 
           {(user.role === 'STUDENT' || user.role === 'TEACHER') && (
             <Link to="/quizzes" className="nav-link">
@@ -133,11 +135,21 @@ function App() {
       <div className="main-content">
         <Suspense fallback={<div className="loading">Loading module...</div>}>
           <Routes>
-            {/* Dashboard - Available to all */}
-            <Route 
-              path="/" 
-              element={<DashboardModule user={user} />} 
-            />
+            {/* Dashboard - Available to students and teachers only */}
+            {user.role !== 'ADMIN' && (
+              <Route 
+                path="/" 
+                element={<DashboardModule user={user} />} 
+              />
+            )}
+
+            {/* Admin Panel redirects to /admin */}
+            {user.role === 'ADMIN' && (
+              <Route 
+                path="/" 
+                element={<Navigate to="/admin" />} 
+              />
+            )}
 
             {/* Quiz Module - Available to students and teachers */}
             {(user.role === 'STUDENT' || user.role === 'TEACHER') && (
@@ -156,7 +168,7 @@ function App() {
             )}
 
             {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" />} />
+            <Route path="*" element={<Navigate to={user.role === 'ADMIN' ? '/admin' : '/'} />} />
           </Routes>
         </Suspense>
       </div>

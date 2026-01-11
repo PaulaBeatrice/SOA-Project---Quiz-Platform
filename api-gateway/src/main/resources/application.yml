@@ -27,7 +27,7 @@ spring:
           predicates:
             - Path=/api/analytics/**
           filters:
-            - StripPrefix=2
+            - StripPrefix=1
         - id: notification-service
           uri: http://notification-service:8084
           predicates:

@@ -121,35 +121,22 @@ function App() {
                 </Link>
               </div>
               <div className="nav-links" style={{ display: 'flex', gap: '20px' }}>
-                {user.role === 'STUDENT' && (
+                {user.role !== 'ADMIN' && (
                   <>
-                    <Link to="/dashboard" style={{ color: 'white', textDecoration: 'none' }}>
+                    <Link to="/" style={{ color: 'white', textDecoration: 'none' }}>
                       Dashboard
                     </Link>
-                    <Link to="/quizzes" style={{ color: 'white', textDecoration: 'none' }}>
-                      Quizzes
-                    </Link>
-                  </>
-                )}
-                {user.role === 'TEACHER' && (
-                  <>
-                    <Link to="/dashboard" style={{ color: 'white', textDecoration: 'none' }}>
-                      Dashboard
-                    </Link>
-                    <Link to="/quizzes" style={{ color: 'white', textDecoration: 'none' }}>
-                      My Quizzes
-                    </Link>
+                    {(user.role === 'STUDENT' || user.role === 'TEACHER') && (
+                      <Link to="/quizzes" style={{ color: 'white', textDecoration: 'none' }}>
+                        {user.role === 'STUDENT' ? 'Quizzes' : 'My Quizzes'}
+                      </Link>
+                    )}
                   </>
                 )}
                 {user.role === 'ADMIN' && (
-                  <>
-                    <Link to="/admin" style={{ color: 'white', textDecoration: 'none' }}>
-                      Admin Panel
-                    </Link>
-                    <Link to="/dashboard" style={{ color: 'white', textDecoration: 'none' }}>
-                      Dashboard
-                    </Link>
-                  </>
+                  <Link to="/admin" style={{ color: 'white', textDecoration: 'none' }}>
+                    Admin Panel
+                  </Link>
                 )}
                 <span style={{ color: 'lightgray' }}>Welcome, {user.username}</span>
                 <button onClick={handleLogout} style={{ padding: '8px 16px', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
@@ -160,20 +147,40 @@ function App() {
 
             {/* Routes */}
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" />} />
-              <Route path="/dashboard" element={<Dashboard user={user} />} />
-              <Route path="/quizzes" element={<QuizModule />} />
-              <Route path="/quiz/:id" element={user.role === 'STUDENT' ? <StudentQuiz user={user} /> : <QuizDetail user={user} />} />
+              {/* Dashboard - Available to students and teachers only */}
+              {user.role !== 'ADMIN' && (
+                <Route 
+                  path="/" 
+                  element={<Suspense fallback={<div style={{padding: '20px', textAlign: 'center'}}>Loading dashboard...</div>}><DashboardModule user={user} /></Suspense>} 
+                />
+              )}
+
+              {/* Admin Panel redirects to /admin */}
               {user.role === 'ADMIN' && (
-                <Route path="/admin" element={
-                  <Suspense fallback={<div style={{padding: '20px', textAlign: 'center'}}>Loading admin panel...</div>}>
-                    <AdminDashboard user={user} />
-                  </Suspense>
-                } />
+                <Route 
+                  path="/" 
+                  element={<Navigate to="/admin" />} 
+                />
               )}
-              {user.role === 'TEACHER' && (
-                <Route path="/admin" element={<Admin user={user} />} />
+
+              {/* Quiz Module - Available to students and teachers */}
+              {(user.role === 'STUDENT' || user.role === 'TEACHER') && (
+                <Route 
+                  path="/quizzes/*" 
+                  element={<Suspense fallback={<div style={{padding: '20px', textAlign: 'center'}}>Loading quizzes...</div>}><QuizModule user={user} /></Suspense>} 
+                />
               )}
+
+              {/* Admin Panel - Available to admins only */}
+              {user.role === 'ADMIN' && (
+                <Route 
+                  path="/admin/*" 
+                  element={<Suspense fallback={<div style={{padding: '20px', textAlign: 'center'}}>Loading admin panel...</div>}><AdminDashboard user={user} /></Suspense>} 
+                />
+              )}
+
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to={user.role === 'ADMIN' ? '/admin' : '/'} />} />
             </Routes>
           </>
         )}

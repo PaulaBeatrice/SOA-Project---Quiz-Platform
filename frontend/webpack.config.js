@@ -7,11 +7,15 @@ module.exports = {
   mode: 'development',
   devServer: {
     port: 3000,
-    historyApiFallback: true,
+    historyApiFallback: {
+      rewrites: [
+        { from: /^(?!\/.*\.[^.]+$|.*\.js$|.*\.css$)/, to: '/' }
+      ]
+    },
     hot: true,
   },
   output: {
-    publicPath: 'auto',
+    publicPath: '/',
     path: path.resolve(__dirname, 'dist'),
     clean: true,
   },
@@ -39,9 +43,9 @@ module.exports = {
       name: 'shell',
       filename: 'remoteEntry.js',
       remotes: {
-        dashboard: 'dashboard@http://quizplatform-dashboard-mfe-1:3001/remoteEntry.js',
-        quiz: 'quiz@http://quizplatform-quiz-mfe-1:3002/remoteEntry.js',
-        admin: 'admin@http://quizplatform-admin-mfe-1:3003/remoteEntry.js',
+        dashboard: 'dashboard@http://localhost:3001/remoteEntry.js',
+        quiz: 'quiz@http://localhost:3002/remoteEntry.js',
+        admin: 'admin@http://localhost:3003/remoteEntry.js',
       },
       exposes: {
         './App': './src/index.js',

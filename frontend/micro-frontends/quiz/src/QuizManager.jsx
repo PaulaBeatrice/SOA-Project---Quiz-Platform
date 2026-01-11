@@ -1,7 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { api } from '@quiz-platform/shared-lib';
+import axios from 'axios';
 import CreateQuiz from './components/CreateQuiz';
+import TakeQuiz from './components/TakeQuiz';
+import QuizDetail from './components/QuizDetail';
+
+// Create axios instance with API base URL
+const api = axios.create({
+  baseURL: 'http://localhost:8080',
+});
+
+// Add token to all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 /**
  * QuizManager Component
@@ -9,8 +25,10 @@ import CreateQuiz from './components/CreateQuiz';
  */
 export default function QuizManager({ user }) {
   const [quizzes, setQuizzes] = useState([]);
+  const [myQuizzes, setMyQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('browse');
+  const [selectedQuizId, setSelectedQuizId] = useState(null);
 
   useEffect(() => {
     loadQuizzes();
@@ -19,8 +37,15 @@ export default function QuizManager({ user }) {
   const loadQuizzes = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/quizzes');
+      // Fetch quizzes through API Gateway
+      // Routes: /api/quiz-service/quizzes -> quiz-service:8082
+      const response = await api.get('/api/quiz-service/quizzes');
       setQuizzes(response.data);
+      // For now, teachers can see all quizzes as "their" quizzes
+      // In a real app, you'd filter by teacher ID
+      if (user?.role === 'TEACHER') {
+        setMyQuizzes(response.data);
+      }
     } catch (error) {
       console.error('Error loading quizzes:', error);
     } finally {
@@ -28,10 +53,48 @@ export default function QuizManager({ user }) {
     }
   };
 
+  const handleDeleteQuiz = async (quizId) => {
+    if (window.confirm('Are you sure you want to delete this quiz?')) {
+      try {
+        await api.delete(`/api/quiz-service/quizzes/${quizId}`);
+        loadQuizzes();
+      } catch (error) {
+        console.error('Error deleting quiz:', error);
+        alert('Failed to delete quiz: ' + (error.response?.data?.message || error.message));
+      }
+    }
+  };
+
+  // If a quiz is selected, show the TakeQuiz component
+  if (selectedQuizId) {
+    return (
+      <div className="quiz-manager">
+        <button 
+          onClick={() => setSelectedQuizId(null)}
+          style={{
+            padding: '10px 20px',
+            marginBottom: '20px',
+            backgroundColor: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer'
+          }}
+        >
+          ← Back to Quizzes
+        </button>
+        <TakeQuiz quizId={selectedQuizId} user={user} />
+      </div>
+    );
+  }
+
   return (
-    <div className="quiz-manager">
+    <Routes>
+      <Route path=":id" element={<QuizDetail user={user} />} />
+      <Route path="*" element={
+        <div className="quiz-manager">
       <div className="quiz-header">
-        <h2> Quiz Management</h2>
+        <h2>Quiz Management</h2>
         <div className="tabs">
           <button
             className={`tab ${activeTab === 'browse' ? 'active' : ''}`}
@@ -40,12 +103,20 @@ export default function QuizManager({ user }) {
             Browse Quizzes
           </button>
           {user?.role === 'TEACHER' && (
-            <button
-              className={`tab ${activeTab === 'create' ? 'active' : ''}`}
-              onClick={() => setActiveTab('create')}
-            >
-              Create Quiz
-            </button>
+            <>
+              <button
+                className={`tab ${activeTab === 'my-quizzes' ? 'active' : ''}`}
+                onClick={() => setActiveTab('my-quizzes')}
+              >
+                My Quizzes
+              </button>
+              <button
+                className={`tab ${activeTab === 'create' ? 'active' : ''}`}
+                onClick={() => setActiveTab('create')}
+              >
+                Create Quiz
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -55,6 +126,8 @@ export default function QuizManager({ user }) {
           <div className="browse-section">
             {loading ? (
               <p>Loading quizzes...</p>
+            ) : quizzes.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#666' }}>No quizzes available</p>
             ) : (
               <div className="quizzes-grid">
                 {quizzes.map((quiz) => (
@@ -62,11 +135,66 @@ export default function QuizManager({ user }) {
                     <h3>{quiz.title}</h3>
                     <p>{quiz.description}</p>
                     <div className="quiz-meta">
-                      <span> {quiz.timeLimit} min</span>
-                      <span> {quiz.questionCount} questions</span>
-                      <span> {quiz.submissionCount} taken</span>
+                      <span>⏱ {quiz.timeLimit || 'Unlimited'} min</span>
+                      <span>❓ {quiz.questions?.length || 0} questions</span>
                     </div>
-                    <button className="take-btn">Take Quiz</button>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button 
+                        className="take-btn"
+                        onClick={() => setSelectedQuizId(quiz.id)}
+                        style={{ flex: 1 }}
+                      >
+                        Take Quiz
+                      </button>
+                      {user?.role === 'TEACHER' && (
+                        <button 
+                          className="take-btn"
+                          onClick={() => window.location.href = `/quizzes/${quiz.id}`}
+                          style={{ flex: 1, backgroundColor: '#17a2b8' }}
+                        >
+                          Manage
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'my-quizzes' && user?.role === 'TEACHER' && (
+          <div className="browse-section">
+            {loading ? (
+              <p>Loading quizzes...</p>
+            ) : myQuizzes.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#666' }}>No quizzes created yet</p>
+            ) : (
+              <div className="quizzes-grid">
+                {myQuizzes.map((quiz) => (
+                  <div key={quiz.id} className="quiz-card">
+                    <h3>{quiz.title}</h3>
+                    <p>{quiz.description}</p>
+                    <div className="quiz-meta">
+                      <span>⏱ {quiz.timeLimit || 'Unlimited'} min</span>
+                      <span>❓ {quiz.questions?.length || 0} questions</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button 
+                        className="take-btn"
+                        onClick={() => window.location.href = `/quizzes/${quiz.id}`}
+                        style={{ flex: 1, backgroundColor: '#17a2b8' }}
+                      >
+                        Manage
+                      </button>
+                      <button 
+                        className="take-btn"
+                        onClick={() => handleDeleteQuiz(quiz.id)}
+                        style={{ flex: 1, backgroundColor: '#dc3545' }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -169,6 +297,8 @@ export default function QuizManager({ user }) {
           opacity: 0.9;
         }
       `}</style>
-    </div>
+        </div>
+      } />
+    </Routes>
   );
 }
