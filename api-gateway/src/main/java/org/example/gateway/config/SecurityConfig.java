@@ -28,6 +28,7 @@ public class SecurityConfig {
         corsConfig.addAllowedMethod("POST");
         corsConfig.addAllowedMethod("PUT");
         corsConfig.addAllowedMethod("DELETE");
+        corsConfig.addAllowedMethod("OPTIONS");
         corsConfig.addAllowedHeader("*");
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

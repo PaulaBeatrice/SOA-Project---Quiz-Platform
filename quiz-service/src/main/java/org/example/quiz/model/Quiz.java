@@ -36,7 +36,7 @@ public class Quiz {
 
     private LocalDateTime endTime;
 
-    private Integer timeLimit; // in minutes
+    private Integer timeLimit; 
 
     private Integer passingScore;
 

@@ -22,7 +22,6 @@ public class QuizController {
 
     @PostMapping
     public ResponseEntity<Quiz> createQuiz(@RequestBody Quiz quiz) {
-        // Ensure createdBy is set (default to 1 if not provided)
         if (quiz.getCreatedBy() == null) {
             quiz.setCreatedBy(1L);
         }
@@ -50,8 +49,8 @@ public class QuizController {
         Quiz quiz = quizService.getQuizById(id);
         logger.info(" Returning quiz {} with {} questions, options: {}, correctAnswers: {}", 
             id, quiz.getQuestions().size(),
-            quiz.getQuestions().isEmpty() ? "N/A" : quiz.getQuestions().get(0).getOptions().size(),
-            quiz.getQuestions().isEmpty() ? "N/A" : quiz.getQuestions().get(0).getCorrectAnswers().size());
+            quiz.getQuestions().isEmpty() ? "Null" : quiz.getQuestions().get(0).getOptions().size(),
+            quiz.getQuestions().isEmpty() ? "Null" : quiz.getQuestions().get(0).getCorrectAnswers().size());
         return ResponseEntity.ok(quiz);
     }
 

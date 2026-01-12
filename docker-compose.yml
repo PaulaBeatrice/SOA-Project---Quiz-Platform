@@ -205,22 +205,6 @@ services:
     networks:
       - quiz-network
 
-  # Note: Kafka Event Consumer Service implementation available at kafka-consumer-service/
-  # Can be deployed separately or as part of existing microservices
-  # Currently Kafka events are consumed by submission-service for real-time processing
-
-  # Serverless Function Service (Report Generator)
-  report-generator-service:
-    image: python:3.11-alpine
-    working_dir: /app
-    volumes:
-      - D:\Proiecte\QuizPlatform\serverless-functions\report-generator:/app
-    command: python -m http.server 9001 --directory /app
-    ports:
-      - "9001:9001"
-    networks:
-      - quiz-network
-
 networks:
   quiz-network:
     driver: bridge

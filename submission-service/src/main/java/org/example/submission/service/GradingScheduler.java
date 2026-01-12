@@ -25,7 +25,7 @@ public class GradingScheduler {
     private RabbitTemplate rabbitTemplate;
     
 
-    @Scheduled(fixedDelay = 5000) // Run every 5 seconds
+    @Scheduled(fixedDelay = 5000) 
     public void gradeSubmissions() {
         try {
             // Find all submissions that have been submitted but not yet graded
@@ -70,8 +70,6 @@ public class GradingScheduler {
                 }
             } catch (Exception e) {
                 System.err.println("Error calling grading function: " + e.getMessage());
-                // Don't fail the whole operation if grading function is unavailable
-                // Try again on next scheduler run
                 return;
             }
 

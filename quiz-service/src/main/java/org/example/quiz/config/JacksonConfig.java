@@ -14,7 +14,6 @@ public class JacksonConfig {
         ObjectMapper mapper = new ObjectMapper();
         // Register Hibernate module for lazy loading support
         mapper.registerModule(new Hibernate5JakartaModule());
-        // Register Java 8 date/time module for LocalDateTime support
         mapper.registerModule(new JavaTimeModule());
         return mapper;
     }

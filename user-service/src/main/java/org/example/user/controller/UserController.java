@@ -44,7 +44,6 @@ public class UserController {
         return ResponseEntity.ok(userService.getAllUsers());
     }
 
-    // Admin endpoints
     @GetMapping("/admin/users")
     public ResponseEntity<List<User>> getAdminUsers(@RequestParam(defaultValue = "all") String role) {
         if ("all".equals(role)) {

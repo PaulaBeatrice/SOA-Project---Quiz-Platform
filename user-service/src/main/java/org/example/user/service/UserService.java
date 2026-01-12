@@ -46,7 +46,6 @@ public class UserService {
 
         user = userRepository.save(user);
 
-        // Publish event to Kafka (non-blocking)
         try {
             Map<String, Object> event = new HashMap<>();
             event.put("eventType", "USER_REGISTERED");
@@ -56,7 +55,6 @@ public class UserService {
             event.put("role", user.getRole().toString());
             kafkaTemplate.send("user-events", event);
         } catch (Exception e) {
-            // Log but don't fail the registration if Kafka is unavailable
             System.err.println("Failed to publish Kafka event: " + e.getMessage());
         }
 
@@ -76,7 +74,6 @@ public class UserService {
             throw new RuntimeException("Account is inactive");
         }
 
-        // Publish event to Kafka (non-blocking)
         try {
             Map<String, Object> event = new HashMap<>();
             event.put("eventType", "USER_LOGGED_IN");
@@ -84,7 +81,6 @@ public class UserService {
             event.put("username", user.getUsername());
             kafkaTemplate.send("user-events", event);
         } catch (Exception e) {
-            // Log but don't fail the login if Kafka is unavailable
             System.err.println("Failed to publish Kafka event: " + e.getMessage());
         }
 

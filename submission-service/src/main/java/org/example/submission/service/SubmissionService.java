@@ -45,7 +45,6 @@ public class SubmissionService {
 
         Submission savedSubmission = submissionRepository.save(submission);
 
-        // Publish event to Kafka (wrapped in try-catch)
         try {
             Map<String, Object> event = new HashMap<>();
             event.put("eventType", "SUBMISSION_STARTED");
@@ -86,7 +85,6 @@ public class SubmissionService {
         );
         rabbitTemplate.convertAndSend("grading-queue", gradingRequest);
 
-        // Publish event to Kafka (wrapped in try-catch)
         try {
             Map<String, Object> event = new HashMap<>();
             event.put("eventType", "SUBMISSION_SUBMITTED");
@@ -128,7 +126,6 @@ public class SubmissionService {
 
             Submission gradedSubmission = submissionRepository.save(submission);
 
-            // Publish event to Kafka (wrapped in try-catch)
             try {
                 Map<String, Object> event = new HashMap<>();
                 event.put("eventType", "SUBMISSION_GRADED");
