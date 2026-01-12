@@ -10,7 +10,7 @@ A quiz platform demonstrating microservices architecture
 ┌────────────────────────────────────────────────────────────────┐
 │                    Quiz Platform System                        │
 │                                                                │
-│  External Users (Students, Teachers)                           │
+│  External Users (Admins, Students, Teachers)                   │
 │           ↕                                                    │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │  Quiz Platform Microservices                            │   │
@@ -50,10 +50,14 @@ A quiz platform demonstrating microservices architecture
 │  │  (React)     │  │  (8080)         │  │ Notification │             │
 │  │  Port: 3000  │  │  - Routing      │  │ Service      │             │
 │  │              │  │  - Auth Filter  │  │ (8084)       │             │
-│  │ - Dashboard  │  │  - Rate limit   │  │              │             │
-│  │ - Quiz UI    │  └────────┬────────┘  │ - STOMP      │             │
-│  │ - WebSocket  │           │           │ - Real-time  │             │
-│  └──────────────┘           │           └──────────────┘             │
+│  │ - Dashboard  │  │  - Rate limit   │  └──────────────┘             |
+│  │ MicroFE(3001)│  └────────┬────────┘                               │
+│  │ - Quiz       │           │                                        │
+│  │ MicroFE(3002)│           │                                        │
+│  │ - Admin      │           │                                        │
+│  │ MicroFE(3003)│           │                                        │   
+│  │ - WebSocket  │           │                                        │
+│  └──────────────┘           │                                        │
 │                             │                                        │
 │          ┌──────────────────┼──────────────────┐                     │
 │          │                  │                  │                     │
@@ -73,7 +77,6 @@ A quiz platform demonstrating microservices architecture
 │   │ (8085)      │   │  (9000)   │    │              │                │
 │   │             │   │           │    │ - Events     │                │
 │   │ - Stats     │   │ - AutoGrade    │ - Streams    │                │
-│   │ - Reports   │   │ - Evaluate     │              │                │
 │   └─────────────┘   └───────────┘    └──────────────┘                │
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐  │
@@ -127,7 +130,6 @@ A quiz platform demonstrating microservices architecture
 
 **1**: Expose secured REST services using JWT authentication
 
-
 #### JWT Authentication Flow
 ```
 Client Request → API Gateway → JWT Validation → Microservice → Database
@@ -179,7 +181,6 @@ POST   /api/submissions/{id}/submit        # STUDENT
 GET    /api/submissions                   # STUDENT , TEACHER
 
 GET    /api/analytics/dashboard           # TEACHER
-GET    /api/analytics/reports             # TEACHER, ADMIN
 
 DELETE /api/admin/users/{id}              # ADMIN
 PUT    /api/admin/settings                # ADMIN
