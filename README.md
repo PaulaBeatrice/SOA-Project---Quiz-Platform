@@ -188,7 +188,7 @@ PUT    /api/admin/settings                # ADMIN
 
 ### **Load Balancer - Scalability **
 
-**2**: Use load balancers (e.g., nginx) or scalable WebSockets (e.g., Redis)
+**2**: Load balancers (e.g., nginx) or scalable WebSockets (e.g., Redis)
 
 **Implementation**:
 
@@ -259,30 +259,11 @@ services:
       - redis
 ```
 
-#### Load Balancer Architecture
-```
-┌──────────────────────────────────────────┐
-│        Client Requests                   │
-│    (Port 80 - Nginx listener)            │
-└──────────────────────┬───────────────────┘
-                       │
-         ┌─────────────▼────────────────┐
-         │  Nginx Load Balancer         │
-         └─────────────┬────────────────┘
-                       │
-      ┌────────────────┼────────────────┐
-      │                │                │
-  ┌───▼────┐      ┌───▼────┐      ┌───▼────┐
-  │ AG - 1 │      │ AG - 2 │      │ AG - 3 │  (Scaled API Gateways)
-  │ :8080  │      │ :8080  │      │ :8080  │
-  └────────┘      └────────┘      └────────┘
-```
-
 ### **Message Broker** 
 
-**3**: Use message brokers (e.g., RabbitMQ)
+**3**: Message brokers (RabbitMQ)
 
-RabbitMQ acts as a message broker between services. The Submission Service publishes grading requests to the queue, and the Grading Service consumes them, processes the submissions, and sends back the results. Port 5672 handles the actual messages, while 15672 provides a web UI for monitoring queues.
+The Submission Service publishes grading requests to the queue, and the Grading Service consumes them, processes the submissions, and sends back the results. Port 5672 handles the actual messages, while 15672 provides a web UI for monitoring queues.
 
 **Implementation**:
 
@@ -307,7 +288,6 @@ public class SubmissionService {
     private RabbitTemplate rabbitTemplate;
     
     public void submitQuiz(Submission submission) {
-        // Save submission
         Submission saved = submissionRepository.save(submission);
         
         // Publish grading request to RabbitMQ
@@ -337,10 +317,7 @@ public class GradingService {
     public void gradeSubmission(GradingRequest request) {
         logger.info("Received grading request: {}", request.getSubmissionId());
         
-        // Grade the submission
         GradingResult result = calculateGrade(request);
-        
-        // Store result
         gradingRepository.save(result);
         
         // Publish result back
@@ -355,49 +332,9 @@ public class GradingService {
 }
 ```
 
-#### RabbitMQ Message Flow
-```
-Submission Service          RabbitMQ              Grading Function
-      │                        │                         │
-      ├─ Submit ─────────────> │                         │
-      │                        ├─ Queue Message ───────> │
-      │                        │                    (Process)
-      │                        │                         │
-      │                        │<─ Result ───────────────┤
-      │<─ Notification ────────┤                         │
-      │                        │                         │
-```
-
-#### Queue Configuration
-```java
-@Configuration
-public class RabbitConfig {
-    
-    // Grading queues
-    @Bean public Queue gradingQueue() { 
-        return new Queue("grading.queue", true); 
-    }
-    
-    @Bean public TopicExchange gradingExchange() { 
-        return new TopicExchange("grading.exchange"); 
-    }
-    
-    @Bean public Binding gradingBinding(Queue gradingQueue, TopicExchange gradingExchange) {
-        return BindingBuilder.bind(gradingQueue)
-            .to(gradingExchange)
-            .with("grading.*");
-    }
-    
-    // Notification queues
-    @Bean public Queue notificationQueue() { 
-        return new Queue("notification.queue", true); 
-    }
-}
-```
-
 ###  **Event Streaming - Kafka ** 
 
-**4**: Use event streaming (e.g., Kafka)
+**4**: Event streaming (Kafka)
 
 **Implementation**:
 
@@ -461,7 +398,6 @@ public class AnalyticsEventListener {
         analyticsService.updateUserSubmissionCount(event.getUserId());
         analyticsService.updateQuizStatistics(event.getQuizId());
         
-        // Store event for audit
         auditService.logEvent(event);
     }
     
@@ -475,7 +411,6 @@ public class AnalyticsEventListener {
         // Update score statistics
         analyticsService.updateScoreStatistics(event.getScore(), event.getMaxScore());
         
-        // Generate insights
         insightService.generatePerformanceInsights(event.getUserId());
     }
 }
@@ -486,7 +421,7 @@ public class AnalyticsEventListener {
 Topic: submission-events
 ├─ Event: SUBMISSION_STARTED     → Quiz attempt initiated
 ├─ Event: SUBMISSION_SUBMITTED   → Quiz answers submitted
-└─  Event: SUBMISSION_GRADED      → Auto-grading completed
+└─  Event: SUBMISSION_GRADED     → Auto-grading completed
 
 Topic: grading-events
 ├─ Event: GRADING_STARTED        → Auto-grading process begins
@@ -494,20 +429,9 @@ Topic: grading-events
 └─ Event: GRADING_FAILED         → Grading error occurred
 
 Topic: analytics-events
-├─ Event: USER_LOGIN             → User logged in
 ├─ Event: QUIZ_CREATED           → New quiz created
-└─  Event: QUIZ_TAKEN             → Quiz attempt recorded
+└─  Event: QUIZ_TAKEN            → Quiz attempt recorded
 ```
-
-#### Event Flow Architecture
-```
-Submission Service ──> Kafka Topics ──> Multiple Consumers
-                             │
-                             ├─> Analytics Service
-                             ├─> Notification Service
-                             └─> Dashboard Service
-```
-
 
 ### **FaaS - Serverless Function** 
 
@@ -553,8 +477,7 @@ public class GradingService {
         List<GradingDetail> details = new ArrayList<>();
         
         for (Question question : quiz.getQuestions()) {
-            String studentAnswer = request.getAnswers()
-                .getOrDefault(question.getId(), "");
+            String studentAnswer = request.getAnswers().getOrDefault(question.getId(), "");
             String correctAnswer = question.getCorrectAnswers().get(0);
             
             boolean isCorrect = studentAnswer.equalsIgnoreCase(correctAnswer);
@@ -597,8 +520,6 @@ public class GradingService {
 -  **Single Responsibility**: Only grades submissions
 -  **Event-Triggered**: Activated via RabbitMQ queue
 -  **Stateless**: No persistent state between invocations
--  **Independent Scaling**: Scales based on queue depth
--  **Containerized**: Docker deployment
 ---
 
 ###  **Web App with Server-Side Notifications ** 
@@ -615,7 +536,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        // Enable simple broker for /topic and /queue
         config.enableSimpleBroker("/topic", "/queue");
         config.setApplicationDestinationPrefixes("/app");
     }
@@ -677,91 +597,6 @@ public class NotificationController {
 **Implementation**:
 
 #### Webpack 5 Module Federation Configuration
-```javascript
-// frontend/webpack.config.js
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-const { ModuleFederationPlugin } = require('webpack').container;
-const path = require('path');
-
-module.exports = {
-  entry: './src/index.js',
-  mode: 'development',
-  devServer: {
-    port: 3000,
-    historyApiFallback: {
-      rewrites: [
-        { from: /^(?!\/.*\.[^.]+$|.*\.js$|.*\.css$)/, to: '/' }
-      ]
-    },
-    hot: true,
-  },
-  output: {
-    publicPath: '/',
-    path: path.resolve(__dirname, 'dist'),
-    clean: true,
-  },
-  module: {
-    rules: [
-      {
-        test: /\.jsx?$/,
-        exclude: /node_modules/,
-        use: {
-          loader: 'babel-loader',
-          options: {
-            presets: ['@babel/preset-react'],
-          },
-        },
-      },
-      {
-        test: /\.css$/,
-        use: ['style-loader', 'css-loader'],
-      },
-    ],
-  },
-  plugins: [
-    // Module Federation for Micro Frontend Architecture
-    new ModuleFederationPlugin({
-      name: 'shell',
-      filename: 'remoteEntry.js',
-      remotes: {
-        dashboard: 'dashboard@http://localhost:3001/remoteEntry.js',
-        quiz: 'quiz@http://localhost:3002/remoteEntry.js',
-        admin: 'admin@http://localhost:3003/remoteEntry.js',
-      },
-      exposes: {
-        './App': './src/index.js',
-        './NotificationService': './src/services/NotificationService.js',
-        './api': './src/services/api.js',
-      },
-      shared: {
-        react: {
-          eager: true,
-          singleton: true,
-          requiredVersion: false,
-          strictVersion: false,
-        },
-        'react-dom': {
-          eager: true,
-          singleton: true,
-          requiredVersion: false,
-          strictVersion: false,
-        },
-        'react-router-dom': {
-          singleton: true,
-          requiredVersion: false,
-          strictVersion: false,
-        },
-      },
-    }),
-    new HtmlWebpackPlugin({
-      template: './public/index.html',
-    }),
-  ],
-  resolve: {
-    extensions: ['.js', '.jsx'],
-  },
-};
-```
 
 #### Shell Application (Main App)
 ```jsx
@@ -787,16 +622,10 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Unified notification handler - single callback for ALL notifications
   const handleNotification = useCallback((notification) => {
-    console.log('🔔 [App] Notification received:', notification);
+    console.log('[App] Notification received:', notification);
     const notifWithId = { ...notification, id: Date.now() };
     setNotifications(prev => [...prev, notifWithId]);
-    
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== notifWithId.id));
-    }, 5000);
   }, []);
 
   // Restore user session on mount and connect to WebSocket
@@ -825,38 +654,6 @@ function App() {
 
   if (loading) return <div>Loading...</div>;
   if (!user) return <Login onLogin={setUser} />;
-
-  return (
-    <div className="app">
-      <nav className="navbar">
-        <h1>Quiz Platform</h1>
-        <div className="nav-links">
-          <Link to="/">Dashboard</Link>
-          {user?.role === 'TEACHER' && <Link to="/quizzes">Manage Quizzes</Link>}
-          {user?.role === 'ADMIN' && <Link to="/admin">Admin Panel</Link>}
-          <button onClick={handleLogout}>Logout</button>
-        </div>
-      </nav>
-      
-      {/* Notification Display */}
-      <div className="notifications">
-        {notifications.map(notif => (
-          <div key={notif.id} className="notification-toast">
-            {notif.message}
-          </div>
-        ))}
-      </div>
-      
-      {/* Micro-Frontend Routes */}
-      <Suspense fallback={<div className="loading">Loading module...</div>}>
-        <Routes>
-          <Route path="/" element={<DashboardModule user={user} />} />
-          <Route path="/quizzes/*" element={user?.role === 'TEACHER' ? <QuizModule user={user} /> : <Navigate to="/" />} />
-          <Route path="/admin/*" element={user?.role === 'ADMIN' ? <AdminModule user={user} /> : <Navigate to="/" />} />
-        </Routes>
-      </Suspense>
-    </div>
-  );
 }
 
 export default App;
@@ -867,261 +664,12 @@ export default App;
 - **Unified Notification Handler**: Single callback manages all WebSocket notifications
 - **Role-Based Access**: Dashboard access for all, Quizzes for TEACHERS, Admin panel for ADMINS
 - **Session Persistence**: User session restored from localStorage
-- **Error Handling**: Graceful fallback if micro-frontend fails to load
 
-#### Shared Services
-```javascript
-// frontend/src/services/api.js
-import axios from 'axios';
+### **Containerization - Docker** 
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
-
-export const api = axios.create({
-  baseURL: API_BASE_URL,
-});
-
-// Add JWT token to all requests
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-export default api;
-```
-
-```javascript
-// frontend/src/services/NotificationService.js
-import SockJS from 'sockjs-client';
-import Stomp from 'stompjs';
-
-class NotificationService {
-  constructor() {
-    this.stompClient = null;
-    this.username = null;
-    this.notificationCallback = null;
-  }
-
-  connect(username, onMessageCallback) {
-    return new Promise((resolve, reject) => {
-      this.username = username;
-      this.notificationCallback = onMessageCallback;
-
-      const socket = new SockJS('http://localhost:8084/ws');
-      this.stompClient = Stomp.over(socket);
-
-      this.stompClient.connect({}, (frame) => {
-        console.log('🔗 Connected:', frame);
-
-        // Subscribe to personal queue (grading results, personal notifications)
-        this.stompClient.subscribe(
-          `/user/${username}/queue/grading-result`,
-          (message) => {
-            const notification = JSON.parse(message.body);
-            this.notificationCallback(notification);
-          }
-        );
-
-        // Subscribe to broadcast channel (new quizzes, system announcements)
-        this.stompClient.subscribe('/topic/quizzes', (message) => {
-          const notification = JSON.parse(message.body);
-          this.notificationCallback(notification);
-        });
-
-        resolve();
-      }, (error) => {
-        console.error('❌ WebSocket connection error:', error);
-        reject(error);
-      });
-    });
-  }
-
-  disconnect() {
-    if (this.stompClient && this.stompClient.connected) {
-      this.stompClient.disconnect(() => {
-        console.log('Disconnected');
-      });
-    }
-  }
-
-  sendMessage(destination, message) {
-    if (this.stompClient && this.stompClient.connected) {
-      this.stompClient.send(destination, {}, JSON.stringify(message));
-    }
-  }
-}
-
-export default new NotificationService();
-```
----
-
-### **Containerization - Docker & Kubernetes** 
-
-**8**: Use containers (Docker, Kubernetes)
+**8**: Use containers (Docker)
 
 #### Docker Compose Deployment
-```yaml
-# docker-compose.yml
-version: '3.9'
-
-services:
-  # ===== Databases =====
-  postgres:
-    image: postgres:15-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: quizdb
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  mongodb:
-    image: mongo:7.0
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
-  # ===== Message Infrastructure =====
-  rabbitmq:
-    image: rabbitmq:3.12-management-alpine
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-
-  zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-    ports:
-      - "2181:2181"
-
-  kafka:
-    image: confluentinc/cp-kafka:latest
-    depends_on:
-      - zookeeper
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    ports:
-      - "9092:9092"
-
-  # ===== Microservices =====
-  user-service:
-    build: ./user-service
-    ports:
-      - "8081:8081"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/userdb
-      SPRING_DATASOURCE_USERNAME: postgres
-    depends_on:
-      - postgres
-
-  quiz-service:
-    build: ./quiz-service
-    ports:
-      - "8082:8082"
-    environment:
-      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/quizdb
-    depends_on:
-      - mongodb
-
-  submission-service:
-    build: ./submission-service
-    ports:
-      - "8083:8083"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/submissiondb
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    depends_on:
-      - postgres
-      - rabbitmq
-      - kafka
-
-  notification-service:
-    build: ./notification-service
-    ports:
-      - "8084:8084"
-    environment:
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_REDIS_HOST: redis
-    depends_on:
-      - rabbitmq
-      - redis
-
-  analytics-service:
-    build: ./analytics-service
-    ports:
-      - "8085:8085"
-    environment:
-      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/analyticsdb
-    depends_on:
-      - mongodb
-
-  grading-function:
-    build: ./grading-function
-    ports:
-      - "9000:9000"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/quizdb
-      SPRING_RABBITMQ_HOST: rabbitmq
-    depends_on:
-      - postgres
-      - rabbitmq
-
-  api-gateway:
-    build: ./api-gateway
-    ports:
-      - "8080:8080"
-    depends_on:
-      - user-service
-      - quiz-service
-      - submission-service
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    depends_on:
-      - api-gateway
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - frontend
-      - api-gateway
-
-volumes:
-  postgres_data:
-  mongo_data:
-  redis_data:
-  rabbitmq_data:
-
-networks:
-  default:
-    name: quiz-platform-network
-    driver: bridge
-```
----
 
 ## Quick Start
 
@@ -1129,21 +677,18 @@ networks:
 - Java 17+
 - Maven 3.8+
 - Docker & Docker Compose
-- Node.js 18+ (for frontend)
+- Node.js 18+ 
 
 ### Docker Compose 
 
 ```bash
 # Build all services
 ./build.ps1  # Windows
-# or
-./build.sh   # Linux/Mac
 
 # Start all services
 docker-compose up -d
 
 ```
-
 ## Service Details
 
 ### API Gateway (Spring Cloud Gateway)
@@ -1187,7 +732,6 @@ docker-compose up -d
   - `POST /submissions/start` - Start quiz attempt
   - `POST /submissions/{id}/submit` - Submit answers
   - `GET /submissions/user/{userId}` - User's submissions
-  - `GET /submissions/quiz/{quizId}` - Quiz submissions
 
 ### Notification Service
 - Real-time notifications via WebSocket
@@ -1209,7 +753,6 @@ docker-compose up -d
   - `GET /analytics/dashboard` - Dashboard statistics
   - `GET /analytics/quiz-stats` - Quiz statistics
   - `GET /analytics/user-stats` - User statistics
-  - `GET /analytics/events` - All events
 
 ### Grading Function (FaaS)
 - Serverless auto-grading
@@ -1260,8 +803,8 @@ QuizPlatform/
 ├── frontend/             # React micro-frontend
 ├── docker-compose.yml    # Docker Compose config
 ├── nginx.conf            # Nginx load balancer config
-```
 
+```
 ---
 
 ## UML Class Diagrams
@@ -1277,7 +820,6 @@ QuizPlatform/
 │ - email: String (unique)                │
 │ - password: String                      │
 │ - role: UserRole (ENUM)                 │
-│ - isActive: Boolean                     │
 │ - createdAt: LocalDateTime              │            
 ├─────────────────────────────────────────┤
 │ + getId(): Long                         │
@@ -1541,10 +1083,7 @@ QuizPlatform/
 │  (Dashboard)       │     Update UI
 └────────────────────┘
 ```
-
 ---
-
-##  Project Structure
 
 ```
 QuizPlatform/
