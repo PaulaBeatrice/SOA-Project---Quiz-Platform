@@ -24,12 +24,6 @@ services:
     networks:
       - quiz-network
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - quiz-network
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -92,6 +86,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3001:3001"
+    environment:
+      - REACT_APP_API_URL=http://localhost/api
+      - REACT_APP_WS_URL=http://localhost/ws
     networks:
       - quiz-network
 
@@ -110,6 +107,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3003:3003"
+    environment:
+      - REACT_APP_API_URL=http://localhost/api
+      - REACT_APP_WS_URL=http://localhost/ws
     networks:
       - quiz-network
 
@@ -176,7 +176,6 @@ services:
       - "8084:8084"
     depends_on:
       - rabbitmq
-      - redis
     networks:
       - quiz-network
 

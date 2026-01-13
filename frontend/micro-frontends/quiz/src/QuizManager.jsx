@@ -7,7 +7,7 @@ import QuizDetail from './components/QuizDetail';
 
 // Create axios instance with API base URL
 const api = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost/api',
 });
 
 // Add token to all requests

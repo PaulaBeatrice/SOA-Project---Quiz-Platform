@@ -27,7 +27,8 @@ class NotificationService {
         return;
       }
 
-      const socket = new SockJS('http://localhost:8084/ws');
+      const WS_URL = process.env.REACT_APP_WS_URL || 'http://localhost/ws';
+      const socket = new SockJS(WS_URL);
 
       this.client = new Client({
         webSocketFactory: () => socket,

@@ -38,25 +38,27 @@ A quiz platform demonstrating microservices architecture
 │                              │                                       │
 │                    ┌─────────▼───────────┐                           │
 │                    │   Nginx (Port 80)   │                           │
-│                    │  Load Balancer      │                           │
-│                    │  - Round-robin      │                           │
-│                    │  - WebSocket upgrade│                           │
+│                    │   Reverse Proxy     │                           │
+│                    │                     │                           │
+│                    │  Routes:            │                           │
+│                    │  / → Frontend:80    │                           │
+│                    │  /api/* → Gateway   │                           │
+│                    │  /ws → Notification │                           │
 │                    └────────┬────────────┘                           │
 │                             │                                        │
 │          ┌──────────────────┼──────────────────┐                     │
 │          │                  │                  │                     │
 │  ┌───────▼──────┐  ┌────────▼────────┐  ┌──────▼───────┐             │
-│  │  Frontend    │  │  API Gateway    │  │ WebSocket    │             │
-│  │  (React)     │  │  (8080)         │  │ Notification │             │
-│  │  Port: 3000  │  │  - Routing      │  │ Service      │             │
-│  │              │  │  - Auth Filter  │  │ (8084)       │             │
-│  │ - Dashboard  │  │  - Rate limit   │  └──────────────┘             |
-│  │ MicroFE(3001)│  └────────┬────────┘                               │
+│  │  Frontend    │  │  API Gateway    │  │ Notification │             │
+│  │  (React)     │  │  (8080)         │  │ Service      │             │
+│  │  Port: 3000  │  │  - Routing      │  │ (8084)       │             │
+│  │              │  │  - JWT Auth     │  │ - WebSocket  │             │
+│  │ - Dashboard  │  │  - Rate limit   │  │ - STOMP/SockJS             |
+│  │ MicroFE(3001)│  └────────┬────────┘  └──────────────┘             │
 │  │ - Quiz       │           │                                        │
 │  │ MicroFE(3002)│           │                                        │
 │  │ - Admin      │           │                                        │
 │  │ MicroFE(3003)│           │                                        │   
-│  │ - WebSocket  │           │                                        │
 │  └──────────────┘           │                                        │
 │                             │                                        │
 │          ┌──────────────────┼──────────────────┐                     │
@@ -82,13 +84,13 @@ A quiz platform demonstrating microservices architecture
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │              Data & Messaging Infrastructure                   │  │
 │  │                                                                │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐   │  │
-│  │  │PostgreSQL│  │ MongoDB  │  │  Redis   │  │   RabbitMQ    │   │  │
-│  │  │(5432)    │  │(27017)   │  │(6379)    │  │   (5672)      │   │  │
-│  │  │          │  │          │  │          │  │               │   │  │
-│  │  │ - Users  │  │ - Quiz   │  │ - Cache  │  │ - Grading Q   │   │  │
-│  │  │ - Submis.│  │ - Analyt.│  │ - Sess.  │  │ - Notifications│  │  │
-│  │  └──────────┘  └──────────┘  └──────────┘  └───────────────┘   │  │
+│  │  ┌──────────┐  ┌──────────┐  ┌───────────────┐                  │  │
+│  │  │PostgreSQL│  │ MongoDB  │  │   RabbitMQ    │                  │  │
+│  │  │(5432)    │  │(27017)   │  │   (5672)      │                  │  │
+│  │  │          │  │          │  │               │                  │  │
+│  │  │ - Users  │  │ - Quiz   │  │ - Grading Q   │                  │  │
+│  │  │ - Submis.│  │ - Analyt.│  │ - Notifications│                 │  │
+│  │  └──────────┘  └──────────┘  └───────────────┘                  │  │
 │  │                                                                │  │
 │  │  ┌──────────────────────────────────────────────────────────┐  │  │
 │  │  │     Kafka + Zookeeper (Event Streaming)                  │  │  │
@@ -117,11 +119,10 @@ A quiz platform demonstrating microservices architecture
 ### Infrastructure Components
 - **PostgreSQL** (5432) - Relational databases (users, submissions)
 - **MongoDB** (27017) - Document storage (quizzes, analytics)
-- **Redis** (6379) - Session store, cache, WebSocket scaling
 - **RabbitMQ** (5672/15672) - Message broker (grading, notifications)
 - **Kafka** (9092) - Event streaming platform
 - **Zookeeper** (2181) - Kafka coordination
-- **Nginx** (80) - Load balancer, reverse proxy
+- **Nginx** (80) - Reverse proxy, single entry point for all client requests
 
 ---
 
@@ -183,76 +184,134 @@ DELETE /api/admin/users/{id}              # ADMIN
 PUT    /api/admin/users/{id}/role         # ADMIN
 ```
 
-### **Load Balancer - Scalability - nginx, Redis **
+### **Nginx Reverse Proxy - Single Entry Point Architecture**
+
+Nginx serves as the single entry point for all client requests, routing traffic to appropriate backend services. All frontend applications communicate through nginx instead of directly accessing backend services.
 
 **Implementation**:
 
-#### Nginx Load Balancer
+#### Nginx Configuration
 
 ```nginx
-# nginx/nginx.conf
-upstream api_gateway {
-    server api-gateway:8080;
-    keepalive 32;
+# nginx.conf
+events {
+    worker_connections 1024;
 }
 
-upstream notification_service {
-    server notification-service:8084;
-}
-
-server {
-    listen 80;
-    
-    # HTTP/REST API Load Balancing 
-    location /api/ {
-        proxy_pass http://api_gateway;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_buffering off;
+http {
+    upstream api_gateway {
+        # Load balancing across multiple API gateway instances
+        server api-gateway:8080;
+        # Add more instances for load balancing:
+        # server api-gateway-2:8080;
+        # server api-gateway-3:8080;
     }
-    
-    # WebSocket Load Balancing 
-    location /ws/ {
-        proxy_pass http://notification_service;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_buffering off;
+
+    server {
+        listen 80;
+        server_name localhost;
+
+        # Enable gzip compression
+        gzip on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+        # API Gateway proxy - All REST API calls
+        location /api/ {
+            proxy_pass http://api_gateway;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # WebSocket proxy for real-time notifications
+        location /ws {
+            proxy_pass http://notification-service:8084;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+        }
+
+        # Serve frontend static files
+        location / {
+            proxy_pass http://frontend:80;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
     }
 }
 ```
 
-#### Redis-Backed WebSocket Scaling
+#### Frontend Configuration
+
+All frontend services use environment variables to route through nginx:
+
+```javascript
+// Frontend API Configuration
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost/api';
+const WS_URL = process.env.REACT_APP_WS_URL || 'http://localhost/ws';
+
+// All API calls go through nginx
+const api = axios.create({
+  baseURL: API_BASE_URL  // http://localhost/api → nginx → api-gateway:8080
+});
+
+// WebSocket connections go through nginx
+const socket = new SockJS(WS_URL);  // http://localhost/ws → nginx → notification-service:8084
+```
+
+#### Docker Compose Configuration
 
 ```yaml
-# application.yml - Notification Service
-spring:
-  session:
-    store-type: redis
-  redis:
-    host: redis
-    port: 6379
-    timeout: 2000ms
-  websocket:
-    message-broker-enabled: true
-    broker-relay-host: redis
+# docker-compose.yml
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-gateway
+      - notification-service
+      - frontend
+    networks:
+      - quiz-network
+
+  frontend:
+    build: ./frontend
+    environment:
+      - REACT_APP_API_URL=http://localhost/api
+      - REACT_APP_WS_URL=http://localhost/ws
+    networks:
+      - quiz-network
 ```
 
-#### Horizontal Scalability
-```dockerfile
-# Docker Compose - Scale services
-services:
-  notification-service:
-    build: ./notification-service
-    deploy:
-      replicas: 3  # 3 instances
-    ports:
-      - "8084:8084"
-    depends_on:
-      - redis
+#### Traffic Flow
+
 ```
+Browser Request → Nginx (Port 80) → Backend Service
+                    ↓
+    ┌───────────────┼───────────────┐
+    │               │               │
+    ▼               ▼               ▼
+/api/*          /ws             /
+    │               │               │
+    ▼               ▼               ▼
+API Gateway   Notification    Frontend
+ (8080)       Service (8084)   (80)
+```
+
+#### Benefits
+
+✅ **Single Entry Point**: All traffic through port 80  
+✅ **Security**: Backend service ports not exposed to clients  
+✅ **Load Balancing Ready**: Easy to add multiple service instances  
+✅ **SSL/TLS Termination**: Centralized HTTPS management  
+✅ **Caching**: Static assets and API response caching  
+✅ **Compression**: Gzip enabled for better performance  
+✅ **Simplified Configuration**: Frontend only knows about nginx  
 
 ### **Message Broker - RabbitMQ** 
 
@@ -646,15 +705,6 @@ public class GradingResponse {
 
 ###  **Web App with Server-Side Notifications ** 
 
-**Implementation**:
-
-#### WebSocket Configuration (Notification Service)
-```java
-@Configuration
-@EnableWebSocketMessageBroker
-public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
-    
-    @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
         config.enableSimpleBroker("/topic", "/queue");
         config.setApplicationDestinationPrefixes("/app");
@@ -730,13 +780,9 @@ public class NotificationController {
 - Question management and editing
 
 **Admin Module** (Port 3003)
-- System administration interface (ADMIN role)
 - User management and monitoring
-- Platform settings and configurations
-- **Lazy Loading**: Remote modules loaded only when needed
-- **Unified Notification Handler**: Single callback manages all WebSocket notifications
+
 - **Role-Based Access**: Dashboard access for all, Quizzes for TEACHERS, Admin panel for ADMINS
-- **Session Persistence**: User session restored from localStorage
 
 ### **Containerization - Docker** 
 
@@ -755,13 +801,14 @@ docker-compose up -d
 ## Service Details
 
 ### API Gateway (Spring Cloud Gateway)
-- Secured entry point, load balancing, JWT validation
-- **Port**: 8080
+- Routes requests to microservices, JWT validation, CORS handling
+- **Port**: 8080 (accessed via nginx at `/api/*`)
 - **Key Features**:
   - JWT token validation on all routes
   - CORS configuration
   - Circuit breaker patterns
   - Request rate limiting
+  - Service routing (users, quizzes, submissions, analytics)
 
 ### User Service
 - Authentication and user management
@@ -797,15 +844,14 @@ docker-compose up -d
   - `GET /submissions/user/{userId}` - User's submissions
 
 ### Notification Service
-- Real-time notifications via WebSocket
+- Real-time notifications via WebSocket (STOMP/SockJS)
 - **Port**: 8084
-- **Storage**: Redis (for scalable WebSocket sessions)
 - **Messaging**: RabbitMQ consumer
-- **WebSocket Endpoint**: `/ws`
+- **WebSocket Endpoint**: `/ws` (accessed via nginx: `http://localhost/ws`)
 - **Topics**:
-  - `/topic/quizzes` - Quiz updates
-  - `/topic/notifications` - General notifications
-  - `/queue/user-{userId}` - User-specific notifications
+  - `/topic/quizzes` - Quiz updates (broadcast)
+  - `/topic/notifications` - General notifications (broadcast)
+  - `/queue/user-{userId}` - User-specific notifications (direct)
 
 ### Analytics Service
 - Event streaming and analytics
