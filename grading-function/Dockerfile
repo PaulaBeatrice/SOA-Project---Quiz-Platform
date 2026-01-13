@@ -2,19 +2,21 @@
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /build
 
-# Copy project files
-COPY pom.xml .
-COPY src ./src
+# Copy parent pom from project root
+COPY pom.xml ./
+# Copy grading-function module
+COPY grading-function/pom.xml ./grading-function/
+COPY grading-function/src ./grading-function/src
 
-# Build the application
+# Build the grading-function module
+WORKDIR /build/grading-function
 RUN mvn clean package -DskipTests
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-# Copy the built jar from build stage
-COPY --from=build /build/target/grading-function-*.jar app.jar
+COPY --from=build /build/grading-function/target/*.jar app.jar
 
 EXPOSE 9000
 
