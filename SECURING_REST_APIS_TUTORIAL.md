@@ -18,7 +18,6 @@ Securing REST APIs involves multiple layers of protection:
 - **Encryption**: Protecting data in transit and at rest
 - **CORS Configuration**: Managing cross-origin requests safely
 
-
 ---
 
 ## JWT Authentication
@@ -313,11 +312,11 @@ public class SecurityConfig {
 
 Roles represent sets of permissions. The Quiz Platform uses three roles:
 
-| Role | Permissions                                            |
-|------|--------------------------------------------------------|
+| Role        | Permissions                                            |
+|-------------|--------------------------------------------------------|
 | **STUDENT** | Take quizzes, view submissions, see scores             |
 | **TEACHER** | Create/edit quizzes, view analytics, grade submissions |
-| **ADMIN** | View all data                                          |
+| **ADMIN**   | View all data                                          |
 
 ### Role Enforcement
 
@@ -331,9 +330,6 @@ public String generateToken(String username, String role) {
     return createToken(claims, username);
 }
 
-// Client sends Authorization header with token
-// GET /api/analytics/dashboard
-// Authorization: Bearer eyJhbGc...eyJyb2xlIjoiVEVBQ0hFUiJ9...
 ```
 
 ### Protected Endpoints
@@ -371,8 +367,7 @@ public class AnalyticsController {
     
     // Accessible by any authenticated user
     @GetMapping("/dashboard")
-    public ResponseEntity<?> getDashboard(
-            @RequestHeader("Authorization") String token) {
+    public ResponseEntity<?> getDashboard(@RequestHeader("Authorization") String token) {
         // Gateway validates token before reaching here
         // Service can extract role from authenticated context if needed
         return ResponseEntity.ok(new DashboardData());
@@ -397,7 +392,7 @@ public class AnalyticsController {
 // 1. Client sends credentials
 // POST /api/users/auth/login
 // {
-//   "username": "student@quiz.com",
+//   "username": "username",
 //   "password": "secure_password"
 // }
 
@@ -441,7 +436,7 @@ public class UserService {
 }
 
 // 3. Client receives token and stores it
-// Response: { token: "eyJhbGc...", username: "student@quiz.com", role: "STUDENT" }
+// Response: { token: "eyJhbGc...", username: "username", role: "STUDENT" }
 
 // 4. Client includes token in subsequent requests
 // GET /api/quizzes
