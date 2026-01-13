@@ -409,23 +409,171 @@ Topic: analytics-events
 └─ Event: QUIZ_DELETED           → Quiz deleted
 ```
 
-### **FaaS - Serverless Function** 
+### **FaaS - Serverless Function (Function as a Service)** 
+
+The grading function is implemented using **Spring Cloud Function**, which provides a unified programming model that can run in multiple environments: as a traditional Spring Boot application, AWS Lambda, Azure Functions, or Google Cloud Functions. This demonstrates true FaaS principles with platform-agnostic code.
 
 **Implementation**:
 
 #### Grading Function Architecture
+
 ```
-Submission Service ──> RabbitMQ ──> Grading Function ──> Update DB
-                                   (Serverless FaaS)
+┌──────────────────────────────────────────────────────────────────┐
+│                    DEPLOYMENT OPTIONS                            │
+│                                                                  │
+│  Option 1: Traditional Docker Container (Current)                │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ Submission Service → RabbitMQ → Grading Function (Port 9000)│  │
+│  │                                  ↓                           │  │
+│  │                           Updates Submission                 │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  Option 2: AWS Lambda (Serverless)                               │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ Submission Service → AWS SQS → AWS Lambda Function          │  │
+│  │                                 (Auto-scales)                │  │
+│  │                                  ↓                           │  │
+│  │                           Updates via API                    │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  Option 3: HTTP Invocation (REST API)                            │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ Any Service → POST /grade → Grading Function                │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-#### Grading Function Service
+#### Core FaaS Implementation (Spring Cloud Function)
+
+The core grading logic is implemented as a pure Java `Function<Input, Output>`:
+
 ```java
+@Component
+public class GradingFunction {
+    @Autowired
+    private WebClient.Builder webClientBuilder;
 
+    @Value("${quiz.service.url}")
+    private String quizServiceUrl;
+
+    @Bean
+    public Function<GradingRequest, GradingResponse> gradeSubmission() {
+        return request -> {
+            // 1. Fetch quiz from Quiz Service
+            Quiz quiz = webClientBuilder.build()
+                .get()
+                .uri(quizServiceUrl + "/quizzes/" + request.getQuizId())
+                .retrieve()
+                .bodyToMono(Quiz.class)
+                .block();
+
+            // 2. Grade each question
+            int score = 0;
+            int maxScore = 0;
+            
+            for (Question question : quiz.getQuestions()) {
+                maxScore += question.getPoints();
+                String studentAnswer = request.getAnswers().get(question.getId());
+                
+                if (isCorrect(question, studentAnswer)) {
+                    score += question.getPoints();
+                }
+            }
+
+            // 3. Return grading result
+            return new GradingResponse(request.getSubmissionId(), score, maxScore);
+        };
+    }
+
+    private boolean isCorrect(Question question, String answer) {
+        return question.getCorrectAnswers().contains(answer);
+    }
+}
+```
+
+#### Multi-Platform Support
+
+**1. Docker Container Deployment (Current)**
+
+The function runs as a Spring Boot application with RabbitMQ integration:
+
+```java
+@Service
+public class GradingListener {
+    @Autowired
+    private GradingFunction gradingFunction;
+
+    @RabbitListener(queues = "grading-queue")
+    public void processGradingRequest(GradingRequest request) {
+        // Invoke the function
+        GradingResponse response = gradingFunction.gradeSubmission().apply(request);
+        
+        // Update submission with result
+        updateSubmissionGrade(response);
+    }
+}
+```
+
+**2. AWS Lambda Deployment**
+
+The same function can be deployed to AWS Lambda using the adapter:
+
+```java
+// AWS Lambda Handler
+public class SimpleLambdaHandler extends FunctionInvoker {
+    // Spring Cloud Function automatically detects and invokes gradeSubmission bean
+}
+```
+
+**serverless.yml** (Serverless Framework configuration):
+```yaml
+service: quiz-grading-function
+
+provider:
+  name: aws
+  runtime: java17
+  memorySize: 512
+  timeout: 30
+
+functions:
+  gradeSubmission:
+    handler: org.example.grading.handler.SimpleLambdaHandler
+    events:
+      # Triggered by SQS (replaces RabbitMQ)
+      - sqs:
+          arn: !GetAtt GradingQueue.Arn
+          batchSize: 10
+      
+      # Also accessible via HTTP
+      - http:
+          path: /grade
+          method: post
+
+resources:
+  Resources:
+    GradingQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: grading-queue
+        VisibilityTimeout: 60
+```
+
+**Deploy to AWS Lambda**:
+```bash
+# Build the function
+mvn clean package
+
+# Deploy using Serverless Framework
+serverless deploy --stage prod
+```
+
+**3. REST API Invocation**
+
+The function can also be invoked directly via HTTP:
+
+```java
 @RestController
-@CrossOrigin(origins = "*")
 public class GradingController {
-
     @Autowired
     private GradingFunction gradingFunction;
 
@@ -436,63 +584,64 @@ public class GradingController {
         return ResponseEntity.ok(response);
     }
 }
+```
 
-@Service
-public class GradingService {
+#### Key FaaS Characteristics
+
+✅ **Single Responsibility**: Only grades quiz submissions  
+✅ **Event-Driven**: Triggered by RabbitMQ (Docker) or SQS (AWS Lambda)  
+✅ **Stateless**: No persistent state between invocations  
+✅ **Auto-Scaling**: In AWS Lambda, automatically scales based on queue depth  
+✅ **Pay-per-Use**: In serverless, you only pay for actual execution time  
+✅ **Platform-Agnostic**: Same code runs in Docker, AWS, Azure, or GCP  
+✅ **Isolated**: Independent deployment and versioning
+
+#### Message Flow
+
+```
+1. Student submits quiz → Submission Service
+2. Submission Service publishes GradingRequest to queue
+   - Docker: RabbitMQ queue
+   - AWS: SQS queue
+3. Grading Function receives message
+4. Function fetches quiz details from Quiz Service
+5. Function calculates score by comparing answers
+6. Function returns GradingResponse
+7. Result updates Submission Service via HTTP callback
+8. Notification sent to student via WebSocket
+```
+
+#### Data Models
+
+```java
+// Input
+public class GradingRequest {
+    private Long submissionId;
+    private Long quizId;
+    private Map<Long, String> answers; // questionId -> studentAnswer
+}
+
+// Output
+public class GradingResponse {
+    private Long submissionId;
+    private Integer score;
+    private Integer maxScore;
     
-    public GradingResult grade(GradingRequest request) {
-        // Fetch quiz
-        Quiz quiz = quizRepository.findById(request.getQuizId())
-            .orElseThrow(() -> new ResourceNotFoundException("Quiz not found"));
-        
-        // Calculate score
-        int score = 0;
-        List<GradingDetail> details = new ArrayList<>();
-        
-        for (Question question : quiz.getQuestions()) {
-            String studentAnswer = request.getAnswers().getOrDefault(question.getId(), "");
-            String correctAnswer = question.getCorrectAnswers().get(0);
-            
-            boolean isCorrect = studentAnswer.equalsIgnoreCase(correctAnswer);
-            
-            if (isCorrect) {
-                score += question.getPointValue();
-            }
-            
-            details.add(new GradingDetail(
-                question.getId(),
-                studentAnswer,
-                correctAnswer,
-                isCorrect,
-                question.getPointValue()
-            ));
-        }
-        
-        // Calculate percentage
-        int maxScore = quiz.getQuestions().stream()
-            .mapToInt(Question::getPointValue)
-            .sum();
-        
-        double percentage = maxScore > 0 ? (score * 100.0) / maxScore : 0;
-        
-        GradingResult result = new GradingResult(
-            request.getSubmissionId(),
-            score,
-            maxScore,
-            percentage,
-            percentage >= 60,  // passing score
-            details,
-            LocalDateTime.now()
-        );
-        
-        logger.info("Grading completed: Score = {}/{}", score, maxScore);
-        return result;
+    public double getPercentage() {
+        return maxScore > 0 ? (score * 100.0) / maxScore : 0;
     }
 }
 ```
--  **Single Responsibility**: Only grades submissions
--  **Event-Triggered**: Activated via RabbitMQ queue
--  **Stateless**: No persistent state between invocations
+
+#### Why This is True FaaS
+
+1. **Function-Oriented Design**: Core logic is a pure `Function<I, O>` with no framework coupling
+2. **Multiple Invocation Methods**: Can be triggered via queue, HTTP, or direct invocation
+3. **Serverless-Ready**: Works with AWS Lambda, Azure Functions, Google Cloud Functions
+4. **Ephemeral Execution**: No long-running processes, only executes when triggered
+5. **Independent Scaling**: Can scale independently of other microservices
+6. **Cloud-Native**: Built with Spring Cloud Function for cloud platform portability
+
 ---
 
 ###  **Web App with Server-Side Notifications ** 
