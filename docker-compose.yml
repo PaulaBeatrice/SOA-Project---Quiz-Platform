@@ -208,6 +208,8 @@ services:
       SPRING_AMQP_DESERIALIZATION_TRUST_ALL: "true"
     networks:
       - quiz-network
+    restart: unless-stopped
+
 
 networks:
   quiz-network:
