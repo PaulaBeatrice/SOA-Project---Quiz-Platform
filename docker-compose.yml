@@ -216,14 +216,4 @@ networks:
 
 volumes:
   postgres-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: D:\DockerData\postgres-data
   mongo-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: D:\DockerData\mongo-data

@@ -17,12 +17,12 @@ api.interceptors.request.use((config) => {
 });
 
 const quizAPI = {
-  getById: (id) => api.get(`/api/quiz-service/quizzes/${id}`),
+  getById: (id) => api.get(`/quiz-service/quizzes/${id}`),
 };
 
 const submissionAPI = {
   start: (quizId, userId) =>
-    api.post(`/api/submissions/start?quizId=${quizId}&userId=${userId}`),
+    api.post(`/submissions/start?quizId=${quizId}&userId=${userId}`),
 
   submit: (submissionId, answers) =>
     api.post(`/submissions/${submissionId}/submit`, answers),

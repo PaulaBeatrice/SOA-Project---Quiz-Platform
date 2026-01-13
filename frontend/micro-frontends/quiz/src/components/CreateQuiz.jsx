@@ -34,7 +34,7 @@ function CreateQuiz({ onQuizCreated }) {
   const fetchQuestions = useCallback(async () => {
     if (quizId) {
       try {
-        const response = await api.get(`/api/quiz-service/quizzes/${quizId}`);
+        const response = await api.get(`/quiz-service/quizzes/${quizId}`);
         setQuestions(response.data.questions || []);
       } catch (err) {
         console.error('Error fetching questions:', err);
@@ -91,7 +91,7 @@ function CreateQuiz({ onQuizCreated }) {
         correctAnswers: [correctAnswerText]
       };
 
-      await api.post(`/api/quiz-service/quizzes/${quizId}/questions`, questionData);
+      await api.post(`/quiz-service/quizzes/${quizId}/questions`, questionData);
 
       setNewQuestion({
         text: '',

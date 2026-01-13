@@ -31,7 +31,7 @@ export default function UserManagement() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const response = await api.get(`/api/users/admin/users?role=${filter}`);
+      const response = await api.get(`/users/admin/users?role=${filter}`);
       setUsers(response.data);
     } catch (error) {
       console.error('Error loading users:', error);
@@ -43,7 +43,7 @@ export default function UserManagement() {
   const handleDeleteUser = async (userId) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
-        await api.delete(`/api/users/admin/users/${userId}`);
+        await api.delete(`/users/admin/users/${userId}`);
         setUsers(users.filter(u => u.id !== userId));
       } catch (error) {
         console.error('Error deleting user:', error);

@@ -17,7 +17,7 @@ api.interceptors.request.use((config) => {
 });
 
 const quizAPI = {
-  getById: (id) => api.get(`/api/quiz-service/quizzes/${id}`),
+  getById: (id) => api.get(`/quiz-service/quizzes/${id}`),
 };
 
 function QuizDetail({ user }) {
@@ -75,7 +75,7 @@ function QuizDetail({ user }) {
         correctAnswers: [correctAnswerText]  // Add the correct answer as an array
       };
 
-      await api.post(`/api/quiz-service/quizzes/${quizId}/questions`, questionData);
+      await api.post(`/quiz-service/quizzes/${quizId}/questions`, questionData);
 
       setNewQuestion({
         text: '',
