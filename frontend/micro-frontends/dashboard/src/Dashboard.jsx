@@ -44,15 +44,15 @@ export default function Dashboard({ user }) {
       }
 
       // Fetch active quizzes through API Gateway
-      // Routes: /api/quiz-service/quizzes -> quiz-service:8082
-      const quizzesRes = await api.get('/api/quiz-service/quizzes');
+      // Routes: /quiz-service/quizzes -> API Gateway -> quiz-service:8082
+      const quizzesRes = await api.get('/quiz-service/quizzes');
       setQuizzes(quizzesRes.data || []);
 
       // Load user submissions through API Gateway
-      // Routes: /api/submissions/user/{userId} -> submission-service:8083
+      // Routes: /submissions/user/{userId} -> API Gateway -> submission-service:8083
       let submissionsData = [];
       try {
-        const submissionsRes = await api.get(`/api/submissions/user/${user.id}`);
+        const submissionsRes = await api.get(`/submissions/user/${user.id}`);
         submissionsData = submissionsRes.data || [];
         setSubmissions(submissionsData);
         console.log('Loaded submissions for user ' + user.id + ':', submissionsData);

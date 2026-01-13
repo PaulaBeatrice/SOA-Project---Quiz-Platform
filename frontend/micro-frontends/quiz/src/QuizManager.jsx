@@ -74,8 +74,8 @@ export default function QuizManager({ user }) {
       console.log(' [QuizManager] loadQuizzes called');
       setLoading(true);
       // Fetch quizzes through API Gateway
-      // Routes: /api/quiz-service/quizzes -> quiz-service:8082
-      const response = await api.get('/api/quiz-service/quizzes');
+      // Routes: /quiz-service/quizzes -> API Gateway -> quiz-service:8082
+      const response = await api.get('/quiz-service/quizzes');
       console.log(' [QuizManager] Quizzes loaded, count:', response.data?.length || 0);
       setQuizzes(response.data);
       // For now, teachers can see all quizzes as "their" quizzes
@@ -94,7 +94,7 @@ export default function QuizManager({ user }) {
   const handleDeleteQuiz = async (quizId) => {
     if (window.confirm('Are you sure you want to delete this quiz?')) {
       try {
-        await api.delete(`/api/quiz-service/quizzes/${quizId}`);
+        await api.delete(`/quiz-service/quizzes/${quizId}`);
         loadQuizzes();
       } catch (error) {
         console.error('Error deleting quiz:', error);

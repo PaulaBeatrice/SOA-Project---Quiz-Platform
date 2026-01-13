@@ -52,7 +52,7 @@ function CreateQuiz({ onQuizCreated }) {
     e.preventDefault();
     try {
       setLoading(true);
-      const response = await api.post('/api/quiz-service/quizzes', {
+      const response = await api.post('/quiz-service/quizzes', {
         title,
         description,
         timeLimit,
@@ -112,7 +112,7 @@ function CreateQuiz({ onQuizCreated }) {
   const handleDeleteQuestion = async (questionId) => {
     if (window.confirm('Are you sure you want to delete this question?')) {
       try {
-        await api.delete(`/api/quiz-service/quizzes/questions/${questionId}`);
+        await api.delete(`/quiz-service/quizzes/questions/${questionId}`);
         fetchQuestions();
       } catch (err) {
         console.error('Error deleting question:', err);

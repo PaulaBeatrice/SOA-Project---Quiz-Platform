@@ -25,7 +25,7 @@ const submissionAPI = {
     api.post(`/api/submissions/start?quizId=${quizId}&userId=${userId}`),
 
   submit: (submissionId, answers) =>
-    api.post(`/api/submissions/${submissionId}/submit`, answers),
+    api.post(`/submissions/${submissionId}/submit`, answers),
 };
 
 export default function TakeQuiz({ quizId, user }) {

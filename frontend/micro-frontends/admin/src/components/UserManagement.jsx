@@ -53,7 +53,7 @@ export default function UserManagement() {
 
   const handleChangeRole = async (userId, newRole) => {
     try {
-      await api.put(`/api/users/admin/users/${userId}/role`, { role: newRole });
+      await api.put(`/users/admin/users/${userId}/role`, { role: newRole });
       loadUsers();
     } catch (error) {
       console.error('Error changing role:', error);

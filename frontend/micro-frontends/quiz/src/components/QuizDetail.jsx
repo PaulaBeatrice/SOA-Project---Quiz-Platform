@@ -94,7 +94,7 @@ function QuizDetail({ user }) {
   const handleDeleteQuestion = async (questionId) => {
     if (window.confirm('Are you sure you want to delete this question?')) {
       try {
-        await api.delete(`/api/quiz-service/quizzes/questions/${questionId}`);
+        await api.delete(`/quiz-service/quizzes/questions/${questionId}`);
         fetchQuiz();
       } catch (err) {
         console.error('Error deleting question:', err);
