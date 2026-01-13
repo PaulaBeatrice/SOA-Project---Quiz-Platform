@@ -194,8 +194,8 @@ services:
 
   grading-function:
     build:
-      context: D:\Proiecte\QuizPlatform\grading-function
-      dockerfile: Dockerfile
+      context: D:\Proiecte\QuizPlatform
+      dockerfile: grading-function/Dockerfile
     ports:
       - "9000:9000"
     depends_on:
