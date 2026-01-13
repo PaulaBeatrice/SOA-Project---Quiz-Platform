@@ -479,10 +479,9 @@ public class GradingFunction {
 ```
 
 **Multiple Invocation Methods**: Can be triggered via queue, HTTP, or direct invocation
-**Serverless-Ready**: Works with AWS Lambda, Azure Functions, Google Cloud Functions
+
 **Ephemeral Execution**: No long-running processes, only executes when triggered
-**Independent Scaling**: Can scale independently of other microservices
-**Cloud-Native**: Built with Spring Cloud Function for cloud platform portability
+
 
 ---
 
