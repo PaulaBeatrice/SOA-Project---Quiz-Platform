@@ -303,16 +303,6 @@ API Gateway   Notification    Frontend
  (8080)       Service (8084)   (80)
 ```
 
-#### Benefits
-
-✅ **Single Entry Point**: All traffic through port 80  
-✅ **Security**: Backend service ports not exposed to clients  
-✅ **Load Balancing Ready**: Easy to add multiple service instances  
-✅ **SSL/TLS Termination**: Centralized HTTPS management  
-✅ **Caching**: Static assets and API response caching  
-✅ **Compression**: Gzip enabled for better performance  
-✅ **Simplified Configuration**: Frontend only knows about nginx  
-
 ### **Message Broker - RabbitMQ** 
 
 The Submission Service publishes grading requests to the queue, and the Grading Service consumes them, processes the submissions, and sends back the results. Port 5672 handles the actual messages, while 15672 provides a web UI for monitoring queues.
