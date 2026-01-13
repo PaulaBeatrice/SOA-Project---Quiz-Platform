@@ -1,0 +1,101 @@
+service: quiz-grading-function
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: java17
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 30
+
+  environment:
+    SPRING_PROFILES_ACTIVE: lambda
+    QUIZ_SERVICE_URL: ${env:QUIZ_SERVICE_URL, 'https://api.yourquizplatform.com'}
+    SUBMISSION_SERVICE_URL: ${env:SUBMISSION_SERVICE_URL, 'https://api.yourquizplatform.com'}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource:
+            - Fn::GetAtt: [GradingQueue, Arn]
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "*"
+
+functions:
+  gradeSubmission:
+    handler: org.example.grading.handler.SimpleLambdaHandler
+    description: Grades quiz submissions automatically
+    events:
+      # Triggered by SQS messages
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - GradingQueue
+              - Arn
+          batchSize: 10
+          maximumBatchingWindowInSeconds: 5
+
+      # Can also be triggered via API Gateway
+      - http:
+          path: /grade
+          method: post
+          cors: true
+
+    package:
+      artifact: target/grading-function-1.0-SNAPSHOT-aws.jar
+
+resources:
+  Resources:
+    # SQS Queue for grading requests (replaces RabbitMQ)
+    GradingQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${self:provider.stage}-grading-queue
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 1209600 # 14 days
+        ReceiveMessageWaitTimeSeconds: 20
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - GradingDLQ
+              - Arn
+          maxReceiveCount: 3
+
+    # Dead Letter Queue for failed messages
+    GradingDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${self:provider.stage}-grading-dlq
+        MessageRetentionPeriod: 1209600 # 14 days
+
+  Outputs:
+    GradingQueueUrl:
+      Description: URL of the SQS Queue for grading requests
+      Value:
+        Ref: GradingQueue
+      Export:
+        Name: ${self:service}-${self:provider.stage}-GradingQueueUrl
+
+    GradingQueueArn:
+      Description: ARN of the SQS Queue for grading requests
+      Value:
+        Fn::GetAtt:
+          - GradingQueue
+          - Arn
+      Export:
+        Name: ${self:service}-${self:provider.stage}-GradingQueueArn
+
+plugins:
+  - serverless-offline
+

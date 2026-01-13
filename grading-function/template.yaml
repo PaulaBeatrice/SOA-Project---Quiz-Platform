@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Quiz Platform - Serverless Grading Function
+
+Globals:
+  Function:
+    Runtime: java17
+    MemorySize: 512
+    Timeout: 30
+    Environment:
+      Variables:
+        SPRING_PROFILES_ACTIVE: lambda
+        QUIZ_SERVICE_URL: !Ref QuizServiceUrl
+        SUBMISSION_SERVICE_URL: !Ref SubmissionServiceUrl
+
+Parameters:
+  QuizServiceUrl:
+    Type: String
+    Default: https://api.yourquizplatform.com
+    Description: URL of the Quiz Service API
+
+  SubmissionServiceUrl:
+    Type: String
+    Default: https://api.yourquizplatform.com
+    Description: URL of the Submission Service API
+
+Resources:
+  # Lambda Function
+  GradingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: quiz-grading-function
+      Handler: org.example.grading.handler.SimpleLambdaHandler::handleRequest
+      CodeUri: target/grading-function-1.0-SNAPSHOT-aws.jar
+      Description: Automatically grades quiz submissions
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt GradingQueue.QueueName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+      Events:
+        # SQS Trigger
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt GradingQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+
+        # HTTP API Trigger (optional)
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /grade
+            Method: POST
+            RestApiId: !Ref GradingApi
+
+  # API Gateway (optional, for HTTP triggers)
+  GradingApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'POST, OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+
+  # SQS Queue (replaces RabbitMQ)
+  GradingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: quiz-grading-queue
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 1209600  # 14 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt GradingDLQ.Arn
+        maxReceiveCount: 3
+
+  # Dead Letter Queue
+  GradingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: quiz-grading-dlq
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  # CloudWatch Log Group
+  GradingFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${GradingFunction}'
+      RetentionInDays: 14
+
+Outputs:
+  GradingFunctionArn:
+    Description: ARN of the Grading Lambda Function
+    Value: !GetAtt GradingFunction.Arn
+    Export:
+      Name: GradingFunctionArn
+
+  GradingQueueUrl:
+    Description: URL of the SQS Queue
+    Value: !Ref GradingQueue
+    Export:
+      Name: GradingQueueUrl
+
+  GradingQueueArn:
+    Description: ARN of the SQS Queue
+    Value: !GetAtt GradingQueue.Arn
+    Export:
+      Name: GradingQueueArn
+
+  GradingApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${GradingApi}.execute-api.${AWS::Region}.amazonaws.com/prod/grade'
+    Export:
+      Name: GradingApiUrl
+

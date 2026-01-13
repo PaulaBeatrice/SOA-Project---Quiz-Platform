@@ -281,23 +281,15 @@ public class SubmissionService {
     private RabbitTemplate rabbitTemplate;
     
     public void submitQuiz(Submission submission) {
-        Submission saved = submissionRepository.save(submission);
-        
-        // Publish grading request to RabbitMQ
-        GradingRequest request = new GradingRequest(
-            saved.getId(),
-            saved.getQuizId(),
-            saved.getUserId(),
-            saved.getAnswers()
+        Submission savedSubmission = submissionRepository.save(submission);
+
+        // Send to RabbitMQ for async grading
+        GradingRequest gradingRequest = new GradingRequest(
+            savedSubmission.getId(),
+            savedSubmission.getQuizId(),
+            savedSubmission.getAnswers()
         );
-        
-        rabbitTemplate.convertAndSend(
-            "grading.exchange",
-            "grading.submit",
-            request
-        );
-        
-        logger.info("Published to RabbitMQ: Submission {}", saved.getId());
+        rabbitTemplate.convertAndSend("grading-queue", gradingRequest);
     }
 }
 ```
@@ -305,22 +297,22 @@ public class SubmissionService {
 #### Message Consumer (Grading Function)
 ```java
 @Service
-public class GradingService {
+public class GradingListener {
     @RabbitListener(queues = "grading.queue")
-    public void gradeSubmission(GradingRequest request) {
-        logger.info("Received grading request: {}", request.getSubmissionId());
-        
-        GradingResult result = calculateGrade(request);
-        gradingRepository.save(result);
-        
-        // Publish result back
-        rabbitTemplate.convertAndSend(
-            "grading.result.exchange",
-            "grading.completed",
-            result
-        );
-        
-        logger.info("Grading completed: Score = {}", result.getScore());
+    public void processGradingRequest(GradingRequest request) {
+        try {
+            System.out.println("Processing grading request for submission: " + request.getSubmissionId());
+            
+            // Call the grading function
+            GradingResponse response = gradingFunction.gradeSubmission().apply(request);
+            
+            // Send the response back to update the submission
+            updateSubmissionGrade(response);
+            
+        } catch (Exception e) {
+            System.err.println("Error processing grading request: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
 ```
@@ -349,26 +341,30 @@ kafka:
 #### Event Producer (Submission Service)
 ```java
 @Service
-public class SubmissionEventPublisher {
+public class SubmissionService {
     @Autowired
     private KafkaTemplate<String, SubmissionEvent> kafkaTemplate;
     
-    public void publishSubmissionEvent(Submission submission) {
-        SubmissionEvent event = new SubmissionEvent(
-            submission.getId(),
-            submission.getUserId(),
-            submission.getQuizId(),
-            submission.getStatus(),
-            System.currentTimeMillis()
-        );
-        
-        kafkaTemplate.send(
-            "submission-events",
-            String.valueOf(submission.getId()),
-            event
-        );
-        
-        logger.info("Published to Kafka: submission-events");
+   public Submission startSubmission(Long quizId, Long userId) {
+        Submission submission = new Submission();
+        submission.setQuizId(quizId);
+        submission.setUserId(userId);
+        submission.setStatus(Submission.Status.IN_PROGRESS);
+
+        Submission savedSubmission = submissionRepository.save(submission);
+
+        try {
+            Map<String, Object> event = new HashMap<>();
+            event.put("eventType", "SUBMISSION_STARTED");
+            event.put("submissionId", savedSubmission.getId());
+            event.put("quizId", quizId);
+            event.put("userId", userId);
+            kafkaTemplate.send("submission-events", event);
+        } catch (Exception e) {
+            System.err.println("Failed to send Kafka event: " + e.getMessage());
+        }
+
+        return savedSubmission;
     }
 }
 ```
@@ -376,33 +372,22 @@ public class SubmissionEventPublisher {
 #### Event Consumer (Analytics Service)
 ```java
 @Service
-public class AnalyticsEventListener {
+public class EventStreamListener {
     
-    @KafkaListener(
-        topics = "submission-events",
-        groupId = "analytics-group"
-    )
-    public void onSubmissionEvent(SubmissionEvent event) {
-        logger.info("Received submission event: {}", event.getId());
-        
-        // Update analytics
-        analyticsService.updateUserSubmissionCount(event.getUserId());
-        analyticsService.updateQuizStatistics(event.getQuizId());
-        
-        auditService.logEvent(event);
-    }
-    
-    @KafkaListener(
-        topics = "grading-events",
-        groupId = "analytics-group"
-    )
-    public void onGradingEvent(GradingEvent event) {
-        logger.info("Received grading event: {}", event.getSubmissionId());
-        
-        // Update score statistics
-        analyticsService.updateScoreStatistics(event.getScore(), event.getMaxScore());
-        
-        insightService.generatePerformanceInsights(event.getUserId());
+        @Autowired
+    private AnalyticsEventRepository eventRepository;
+
+    @KafkaListener(topics = {"user-events", "quiz-events", "submission-events"}, groupId = "analytics-group")
+    public void consumeEvent(Map<String, Object> eventData) {
+        String eventType = (String) eventData.get("eventType");
+
+        AnalyticsEvent event = new AnalyticsEvent();
+        event.setEventType(eventType);
+        event.setData(eventData);
+
+        eventRepository.save(event);
+
+        System.out.println("Stored analytics event: " + eventType);
     }
 }
 ```
@@ -412,7 +397,7 @@ public class AnalyticsEventListener {
 Topic: submission-events
 ├─ Event: SUBMISSION_STARTED     → Quiz attempt initiated
 ├─ Event: SUBMISSION_SUBMITTED   → Quiz answers submitted
-└─  Event: SUBMISSION_GRADED     → Auto-grading completed
+└─ Event: SUBMISSION_GRADED      → Auto-grading completed
 
 Topic: grading-events
 ├─ Event: GRADING_STARTED        → Auto-grading process begins
@@ -421,7 +406,7 @@ Topic: grading-events
 
 Topic: analytics-events
 ├─ Event: QUIZ_CREATED           → New quiz created
-└─  Event: QUIZ_TAKEN            → Quiz attempt recorded
+└─ Event: QUIZ_DELETED           → Quiz deleted
 ```
 
 ### **FaaS - Serverless Function** 
@@ -438,18 +423,17 @@ Submission Service ──> RabbitMQ ──> Grading Function ──> Update DB
 ```java
 
 @RestController
-@RequestMapping("/api/grade")
+@CrossOrigin(origins = "*")
 public class GradingController {
+
     @Autowired
-    private GradingService gradingService;
-    
-    @PostMapping
-    public ResponseEntity<GradingResult> grade(@RequestBody GradingRequest request) {
-        logger.info("Processing grading request: {}", request.getSubmissionId());
-        
-        GradingResult result = gradingService.grade(request);
-        
-        return ResponseEntity.ok(result);
+    private GradingFunction gradingFunction;
+
+    @PostMapping("/grade")
+    public ResponseEntity<GradingResponse> grade(@RequestBody GradingRequest request) {
+        Function<GradingRequest, GradingResponse> function = gradingFunction.gradeSubmission();
+        GradingResponse response = function.apply(request);
+        return ResponseEntity.ok(response);
     }
 }
 
