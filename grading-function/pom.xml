@@ -97,7 +97,13 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <classifier>exec</classifier>
+                    <mainClass>org.example.grading.GradingFunctionApplication</mainClass>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
                 </configuration>
             </plugin>
 
@@ -124,4 +130,3 @@
     </build>
 
 </project>
-
