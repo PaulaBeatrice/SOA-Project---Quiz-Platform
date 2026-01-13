@@ -4,7 +4,7 @@ A quiz platform demonstrating microservices architecture
 
 ## System Architecture
 
-### C4 Model - Level 1: System Context
+### System Context
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -24,7 +24,7 @@ A quiz platform demonstrating microservices architecture
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### C4 Model - Level 2: Container Diagram
+### Container Diagram
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -36,15 +36,15 @@ A quiz platform demonstrating microservices architecture
 │  └────────────────────────────────────────────────────────────────┘  │
 │                              ▲                                       │
 │                              │                                       │
-│                    ┌─────────▼────────────┐                          │
-│                    │   Nginx (Port 80)    │                          │
-│                    │  Load Balancer       │                          │
-│                    │  - Round-robin       │                          │
-│                    │  - WebSocket upgrade │                          │
-│                    └─────────┬────────────┘                          │
-│                              │                                       │
-│          ┌───────────────────┼───────────────────┐                   │
-│          │                   │                   │                   │
+│                    ┌─────────▼───────────┐                           │
+│                    │   Nginx (Port 80)   │                           │
+│                    │  Load Balancer      │                           │
+│                    │  - Round-robin      │                           │
+│                    │  - WebSocket upgrade│                           │
+│                    └────────┬────────────┘                           │
+│                             │                                        │
+│          ┌──────────────────┼──────────────────┐                     │
+│          │                  │                  │                     │
 │  ┌───────▼──────┐  ┌────────▼────────┐  ┌──────▼───────┐             │
 │  │  Frontend    │  │  API Gateway    │  │ WebSocket    │             │
 │  │  (React)     │  │  (8080)         │  │ Notification │             │
@@ -69,8 +69,8 @@ A quiz platform demonstrating microservices architecture
 │   │ - Register  │   │ - CRUD     │    │ - Submit     │               │
 │   │ - Login     │   │ - Questions│    │ - Grade      │               │
 │   │ - Profile   │   │ - Validate │    │ - Analytics  │               │
-│   └──────┬──────┘   └───────┬────┘    └────────┬─────┘               │
-│          │                  │                  │                     │
+│   └──────┬──────┘   └──────┬─────┘    └──────┬───────┘               │
+│          │                 │                 │                       │
 │   ┌──────▼──────┐   ┌──────▼────┐    ┌───────▼──────┐                │
 │   │ Analytics   │   │  Grading  │    │ Kafka        │                │
 │   │ Service     │   │  Function │    │ Consumer     │                │
@@ -125,10 +125,7 @@ A quiz platform demonstrating microservices architecture
 
 ---
 
-
-###  **Secured REST API **
-
-**1**: Expose secured REST services using JWT authentication
+###  **Secured REST API using JWT authentication **
 
 #### JWT Authentication Flow
 ```
@@ -183,12 +180,10 @@ GET    /api/submissions                   # STUDENT , TEACHER
 GET    /api/analytics/dashboard           # TEACHER
 
 DELETE /api/admin/users/{id}              # ADMIN
-PUT    /api/admin/settings                # ADMIN
+PUT    /api/admin/users/{id}/role         # ADMIN
 ```
 
-### **Load Balancer - Scalability **
-
-**2**: Load balancers (e.g., nginx) or scalable WebSockets (e.g., Redis)
+### **Load Balancer - Scalability - nginx, Redis **
 
 **Implementation**:
 
@@ -259,9 +254,7 @@ services:
       - redis
 ```
 
-### **Message Broker** 
-
-**3**: Message brokers (RabbitMQ)
+### **Message Broker - RabbitMQ** 
 
 The Submission Service publishes grading requests to the queue, and the Grading Service consumes them, processes the submissions, and sends back the results. Port 5672 handles the actual messages, while 15672 provides a web UI for monitoring queues.
 
@@ -333,8 +326,6 @@ public class GradingService {
 ```
 
 ###  **Event Streaming - Kafka ** 
-
-**4**: Event streaming (Kafka)
 
 **Implementation**:
 
@@ -435,8 +426,6 @@ Topic: analytics-events
 
 ### **FaaS - Serverless Function** 
 
-**5**: Use FaaS (Function as a Service)
-
 **Implementation**:
 
 #### Grading Function Architecture
@@ -524,8 +513,6 @@ public class GradingService {
 
 ###  **Web App with Server-Side Notifications ** 
 
-**6**: Web app consuming REST services and receiving server-side notifications
-
 **Implementation**:
 
 #### WebSocket Configuration (Notification Service)
@@ -592,74 +579,27 @@ public class NotificationController {
 
 ### **Micro-Frontend Architecture ** 
 
-**7**: Use micro-frontend architecture
+### Shell Application (Port 3000)
+- Main host application container
+- Loads Dashboard, Quiz, and Admin micro-frontends dynamically
+- Handles user authentication and session management
+- Unified WebSocket notification handler
+- Role-based routing and access control
 
-**Implementation**:
+### Micro-Frontends (Independently Deployed)
+**Dashboard Module** (Port 3001)
+- User dashboard with quiz statistics
+- Performance analytics and results history
 
-#### Webpack 5 Module Federation Configuration
+**Quiz Module** (Port 3002)
+- Quiz creation and management (TEACHER role)
+- Quiz-taking interface (STUDENT role)
+- Question management and editing
 
-#### Shell Application (Main App)
-```jsx
-// frontend/src/App.jsx
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
-import { Routes, Route, Link, Navigate } from 'react-router-dom';
-
-// Lazy load remote micro-frontend modules
-const DashboardModule = lazy(() => import('dashboard/Dashboard'));
-const QuizModule = lazy(() => import('quiz/QuizManager'));
-const AdminModule = lazy(() => import('admin/AdminDashboard'));
-
-// Local pages
-import Login from './components/Login';
-import NotificationService from './services/NotificationService';
-
-/**
- * Shell Application - Main App Container
- * Loads micro-frontends based on user role and route
- */
-function App() {
-  const [user, setUser] = useState(null);
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const handleNotification = useCallback((notification) => {
-    console.log('[App] Notification received:', notification);
-    const notifWithId = { ...notification, id: Date.now() };
-    setNotifications(prev => [...prev, notifWithId]);
-  }, []);
-
-  // Restore user session on mount and connect to WebSocket
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const username = localStorage.getItem('username');
-    const role = localStorage.getItem('role');
-    const userId = localStorage.getItem('userId');
-
-    if (token && username && userId) {
-      const userData = { 
-        id: parseInt(userId), 
-        username, 
-        role,
-        firstName: localStorage.getItem('firstName'),
-        lastName: localStorage.getItem('lastName'),
-        token 
-      };
-      setUser(userData);
-      
-      // Connect to notification service
-      NotificationService.connect(username, handleNotification);
-    }
-    setLoading(false);
-  }, [handleNotification]);
-
-  if (loading) return <div>Loading...</div>;
-  if (!user) return <Login onLogin={setUser} />;
-}
-
-export default App;
-```
-
-**Key Features:**
+**Admin Module** (Port 3003)
+- System administration interface (ADMIN role)
+- User management and monitoring
+- Platform settings and configurations
 - **Lazy Loading**: Remote modules loaded only when needed
 - **Unified Notification Handler**: Single callback manages all WebSocket notifications
 - **Role-Based Access**: Dashboard access for all, Quizzes for TEACHERS, Admin panel for ADMINS
@@ -667,23 +607,13 @@ export default App;
 
 ### **Containerization - Docker** 
 
-**8**: Use containers (Docker)
-
 #### Docker Compose Deployment
 
-## Quick Start
-
-### Prerequisites
-- Java 17+
-- Maven 3.8+
-- Docker & Docker Compose
-- Node.js 18+ 
-
-### Docker Compose 
+## Quick Start - Docker Compose 
 
 ```bash
 # Build all services
-./build.ps1  # Windows
+./build.ps1  
 
 # Start all services
 docker-compose up -d
@@ -761,33 +691,6 @@ docker-compose up -d
 - **Function**: `gradeSubmission(GradingRequest) -> GradingResponse`
 - **Endpoint**: `POST /grade`
 - **Logic**: Fetches quiz, compares answers, calculates score
-
-## Micro-Frontend Architecture
-
-The frontend uses Webpack Module Federation for true micro-frontend architecture:
-
-### Shell Application (Port 3000)
-- Main host application container
-- Loads Dashboard, Quiz, and Admin micro-frontends dynamically
-- Handles user authentication and session management
-- Unified WebSocket notification handler
-- Role-based routing and access control
-
-### Micro-Frontends (Independently Deployed)
-**Dashboard Module** (Port 3001)
-- User dashboard with quiz statistics
-- Performance analytics and results history
-
-**Quiz Module** (Port 3002)
-- Quiz creation and management (TEACHER role)
-- Quiz-taking interface (STUDENT role)
-- Question management and editing
-
-**Admin Module** (Port 3003)
-- System administration interface (ADMIN role)
-- User management and monitoring
-- Platform settings and configurations
-
 
 ## Project Structure
 
@@ -973,7 +876,7 @@ QuizPlatform/
 
 ---
 
-## C4 Level 3: Component Diagram (Submission Service)
+## Component Diagram (Submission Service)
 
 ```
 ┌──────────────────────────────────────────────────────┐
