@@ -411,7 +411,7 @@ Topic: analytics-events
 
 ### **FaaS - Serverless Function (Function as a Service)** 
 
-The grading function is implemented using **Spring Cloud Function**, which provides a unified programming model that can run in multiple environments: as a traditional Spring Boot application, AWS Lambda, Azure Functions, or Google Cloud Functions. This demonstrates true FaaS principles with platform-agnostic code.
+The grading function is implemented using **Spring Cloud Function**, which provides a unified programming model that can run in multiple environments
 
 **Implementation**:
 
@@ -423,22 +423,9 @@ The grading function is implemented using **Spring Cloud Function**, which provi
 │                                                                  │
 │  Option 1: Traditional Docker Container (Current)                │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │ Submission Service → RabbitMQ → Grading Function (Port 9000)│  │
-│  │                                  ↓                           │  │
-│  │                           Updates Submission                 │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  Option 2: AWS Lambda (Serverless)                               │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ Submission Service → AWS SQS → AWS Lambda Function          │  │
-│  │                                 (Auto-scales)                │  │
-│  │                                  ↓                           │  │
-│  │                           Updates via API                    │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  Option 3: HTTP Invocation (REST API)                            │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ Any Service → POST /grade → Grading Function                │  │
+│  │Submission Service → RabbitMQ → Grading Function (Port 9000)│  │
+│  │                                  ↓                         │  │
+│  │                           Updates Submission               │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -491,156 +478,11 @@ public class GradingFunction {
 }
 ```
 
-#### Multi-Platform Support
-
-**1. Docker Container Deployment (Current)**
-
-The function runs as a Spring Boot application with RabbitMQ integration:
-
-```java
-@Service
-public class GradingListener {
-    @Autowired
-    private GradingFunction gradingFunction;
-
-    @RabbitListener(queues = "grading-queue")
-    public void processGradingRequest(GradingRequest request) {
-        // Invoke the function
-        GradingResponse response = gradingFunction.gradeSubmission().apply(request);
-        
-        // Update submission with result
-        updateSubmissionGrade(response);
-    }
-}
-```
-
-**2. AWS Lambda Deployment**
-
-The same function can be deployed to AWS Lambda using the adapter:
-
-```java
-// AWS Lambda Handler
-public class SimpleLambdaHandler extends FunctionInvoker {
-    // Spring Cloud Function automatically detects and invokes gradeSubmission bean
-}
-```
-
-**serverless.yml** (Serverless Framework configuration):
-```yaml
-service: quiz-grading-function
-
-provider:
-  name: aws
-  runtime: java17
-  memorySize: 512
-  timeout: 30
-
-functions:
-  gradeSubmission:
-    handler: org.example.grading.handler.SimpleLambdaHandler
-    events:
-      # Triggered by SQS (replaces RabbitMQ)
-      - sqs:
-          arn: !GetAtt GradingQueue.Arn
-          batchSize: 10
-      
-      # Also accessible via HTTP
-      - http:
-          path: /grade
-          method: post
-
-resources:
-  Resources:
-    GradingQueue:
-      Type: AWS::SQS::Queue
-      Properties:
-        QueueName: grading-queue
-        VisibilityTimeout: 60
-```
-
-**Deploy to AWS Lambda**:
-```bash
-# Build the function
-mvn clean package
-
-# Deploy using Serverless Framework
-serverless deploy --stage prod
-```
-
-**3. REST API Invocation**
-
-The function can also be invoked directly via HTTP:
-
-```java
-@RestController
-public class GradingController {
-    @Autowired
-    private GradingFunction gradingFunction;
-
-    @PostMapping("/grade")
-    public ResponseEntity<GradingResponse> grade(@RequestBody GradingRequest request) {
-        Function<GradingRequest, GradingResponse> function = gradingFunction.gradeSubmission();
-        GradingResponse response = function.apply(request);
-        return ResponseEntity.ok(response);
-    }
-}
-```
-
-#### Key FaaS Characteristics
-
-✅ **Single Responsibility**: Only grades quiz submissions  
-✅ **Event-Driven**: Triggered by RabbitMQ (Docker) or SQS (AWS Lambda)  
-✅ **Stateless**: No persistent state between invocations  
-✅ **Auto-Scaling**: In AWS Lambda, automatically scales based on queue depth  
-✅ **Pay-per-Use**: In serverless, you only pay for actual execution time  
-✅ **Platform-Agnostic**: Same code runs in Docker, AWS, Azure, or GCP  
-✅ **Isolated**: Independent deployment and versioning
-
-#### Message Flow
-
-```
-1. Student submits quiz → Submission Service
-2. Submission Service publishes GradingRequest to queue
-   - Docker: RabbitMQ queue
-   - AWS: SQS queue
-3. Grading Function receives message
-4. Function fetches quiz details from Quiz Service
-5. Function calculates score by comparing answers
-6. Function returns GradingResponse
-7. Result updates Submission Service via HTTP callback
-8. Notification sent to student via WebSocket
-```
-
-#### Data Models
-
-```java
-// Input
-public class GradingRequest {
-    private Long submissionId;
-    private Long quizId;
-    private Map<Long, String> answers; // questionId -> studentAnswer
-}
-
-// Output
-public class GradingResponse {
-    private Long submissionId;
-    private Integer score;
-    private Integer maxScore;
-    
-    public double getPercentage() {
-        return maxScore > 0 ? (score * 100.0) / maxScore : 0;
-    }
-}
-```
-
-#### Why This is True FaaS
-
-1. **Function-Oriented Design**: Core logic is a pure `Function<I, O>` with no framework coupling
-2. **Multiple Invocation Methods**: Can be triggered via queue, HTTP, or direct invocation
-3. **Serverless-Ready**: Works with AWS Lambda, Azure Functions, Google Cloud Functions
-4. **Ephemeral Execution**: No long-running processes, only executes when triggered
-5. **Independent Scaling**: Can scale independently of other microservices
-6. **Cloud-Native**: Built with Spring Cloud Function for cloud platform portability
+**Multiple Invocation Methods**: Can be triggered via queue, HTTP, or direct invocation
+**Serverless-Ready**: Works with AWS Lambda, Azure Functions, Google Cloud Functions
+**Ephemeral Execution**: No long-running processes, only executes when triggered
+**Independent Scaling**: Can scale independently of other microservices
+**Cloud-Native**: Built with Spring Cloud Function for cloud platform portability
 
 ---
 
@@ -719,7 +561,7 @@ public class NotificationController {
 - Unified WebSocket notification handler
 - Role-based routing and access control
 
-### Micro-Frontends (Independently Deployed)
+### Micro-Frontends 
 **Dashboard Module** (Port 3001)
 - User dashboard with quiz statistics
 - Performance analytics and results history
@@ -733,10 +575,8 @@ public class NotificationController {
 - System administration interface (ADMIN role)
 - User management and monitoring
 - Platform settings and configurations
-- **Lazy Loading**: Remote modules loaded only when needed
-- **Unified Notification Handler**: Single callback manages all WebSocket notifications
+
 - **Role-Based Access**: Dashboard access for all, Quizzes for TEACHERS, Admin panel for ADMINS
-- **Session Persistence**: User session restored from localStorage
 
 ### **Containerization - Docker** 
 
@@ -752,79 +592,6 @@ public class NotificationController {
 docker-compose up -d
 
 ```
-## Service Details
-
-### API Gateway (Spring Cloud Gateway)
-- Secured entry point, load balancing, JWT validation
-- **Port**: 8080
-- **Key Features**:
-  - JWT token validation on all routes
-  - CORS configuration
-  - Circuit breaker patterns
-  - Request rate limiting
-
-### User Service
-- Authentication and user management
-- **Port**: 8081
-- **Database**: PostgreSQL (userdb)
-- **Endpoints**:
-  - `POST /users/auth/register` - User registration
-  - `POST /users/auth/login` - User login (returns JWT)
-  - `GET /users/{id}` - Get user by ID
-  - `GET /users/username/{username}` - Get user by username
-
-### Quiz Service
-- Quiz and question management
-- **Port**: 8082
-- **Database**: PostgreSQL (quizdb)
-- **Messaging**: Publishes to Kafka (quiz-events), RabbitMQ (notifications)
-- **Endpoints**:
-  - `POST /quizzes` - Create quiz
-  - `GET /quizzes` - List all quizzes
-  - `GET /quizzes/{id}` - Get quiz details
-  - `PUT /quizzes/{id}` - Update quiz
-  - `DELETE /quizzes/{id}` - Delete quiz
-
-### Submission Service
-- Handle quiz submissions and grading
-- **Port**: 8083
-- **Database**: PostgreSQL (submissiondb)
-- **Messaging**: Kafka producer/consumer, RabbitMQ consumer
-- **FaaS Integration**: Calls grading function for auto-grading
-- **Endpoints**:
-  - `POST /submissions/start` - Start quiz attempt
-  - `POST /submissions/{id}/submit` - Submit answers
-  - `GET /submissions/user/{userId}` - User's submissions
-
-### Notification Service
-- Real-time notifications via WebSocket
-- **Port**: 8084
-- **Storage**: Redis (for scalable WebSocket sessions)
-- **Messaging**: RabbitMQ consumer
-- **WebSocket Endpoint**: `/ws`
-- **Topics**:
-  - `/topic/quizzes` - Quiz updates
-  - `/topic/notifications` - General notifications
-  - `/queue/user-{userId}` - User-specific notifications
-
-### Analytics Service
-- Event streaming and analytics
-- **Port**: 8085
-- **Database**: MongoDB (analyticsdb)
-- **Messaging**: Kafka consumer (all event topics)
-- **Endpoints**:
-  - `GET /analytics/dashboard` - Dashboard statistics
-  - `GET /analytics/quiz-stats` - Quiz statistics
-  - `GET /analytics/user-stats` - User statistics
-
-### Grading Function (FaaS)
-- Serverless auto-grading
-- **Port**: 9000
-- **Type**: Spring Cloud Function
-- **Function**: `gradeSubmission(GradingRequest) -> GradingResponse`
-- **Endpoint**: `POST /grade`
-- **Logic**: Fetches quiz, compares answers, calculates score
-
 ## Project Structure
 
 ```
@@ -864,12 +631,6 @@ QuizPlatform/
 │ + isTeacher(): Boolean                  │
 │ + isAdmin(): Boolean                    │
 │ + validatePassword(raw): Boolean        │
-└─────────────────────────────────────────┘
-         △
-         │ implements
-         │
-┌─────────────────────────────────────────┐
-│      UserDetails (Spring Security)      │
 └─────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────┐
