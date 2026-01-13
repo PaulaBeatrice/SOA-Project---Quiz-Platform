@@ -38,6 +38,11 @@ module.exports = {
     ],
   },
   plugins: [
+    new webpack.DefinePlugin({
+      'process.env.REACT_APP_API_URL': JSON.stringify(process.env.REACT_APP_API_URL || 'http://localhost/api'),
+      'process.env.REACT_APP_WS_URL': JSON.stringify(process.env.REACT_APP_WS_URL || 'http://localhost/ws'),
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
+    }),
     // Module Federation for Micro Frontend Architecture
     new ModuleFederationPlugin({
       name: 'shell',

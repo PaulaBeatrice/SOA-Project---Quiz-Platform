@@ -1,5 +1,6 @@
 const { ModuleFederationPlugin } = require('webpack').container;
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
 const path = require('path');
 
 module.exports = {
@@ -47,6 +48,11 @@ module.exports = {
     ]
   },
   plugins: [
+    new webpack.DefinePlugin({
+      'process.env.REACT_APP_API_URL': JSON.stringify(process.env.REACT_APP_API_URL || 'http://localhost/api'),
+      'process.env.REACT_APP_WS_URL': JSON.stringify(process.env.REACT_APP_WS_URL || 'http://localhost/ws'),
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
+    }),
     new ModuleFederationPlugin({
       name: 'dashboard',
       filename: 'remoteEntry.js',
