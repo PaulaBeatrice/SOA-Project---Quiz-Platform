@@ -54,6 +54,98 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    public String generateToken(String username, String role) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
+        return createToken(claims, username);
+    }
+
+    private String createToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder()
+                .claims(claims)
+                .subject(subject)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    public String extractUsername(String token) {
+        return extractAllClaims(token).getSubject();
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    private Boolean isTokenExpired(String token) {
+        return extractAllClaims(token).getExpiration().before(new Date());
+    }
+
+    public Boolean validateToken(String token, String username) {
+        final String extractedUsername = extractUsername(token);
+        return (extractedUsername.equals(username) && !isTokenExpired(token));
+    }
+}
+```
+
+**Key Points:**
+- Secret key must be at least 256 bits for HS256 algorithm
+- Token expiration is set server-side (typically 24 hours)
+- Custom claims (e.g., `role`) are added for authorization
+- Signature verifies token hasn't been tampered with
+
+### JWT Validation in User Service
+
+The user-service validates tokens when needed (e.g., for internal authentication checks):
+
+```java
+public Boolean validateToken(String token, String username) {
+    final String extractedUsername = extractUsername(token);
+    return (extractedUsername.equals(username) && !isTokenExpired(token));
+}
+
+public String extractUsername(String token) {
+    return extractAllClaims(token).getSubject();
+}
+
+private Claims extractAllClaims(String token) {
+    return Jwts.parser()
+            .verifyWith(getSigningKey())
+            .build()
+            .parseSignedClaims(token)
+            .getPayload();
+}
+
+private Boolean isTokenExpired(String token) {
+    return extractAllClaims(token).getExpiration().before(new Date());
+}
+```
+
+### JWT Validation in API Gateway
+
+The API Gateway uses a different `JwtUtil` implementation focused on token validation and claim extraction:
+
+```java
+// From api-gateway/src/main/java/org/example/gateway/security/JwtUtil.java
+@Component
+public class JwtUtil {
+
+    @Value("${jwt.secret}")
+    private String secret;
+
+    @Value("${jwt.expiration}")
+    private Long expiration;
+
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
     public Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -93,36 +185,11 @@ public class JwtUtil {
 }
 ```
 
-**Key Points:**
-- Secret key must be at least 256 bits for HS256 algorithm
-- Token expiration is set server-side (typically 24 hours)
-- Custom claims (e.g., `role`) are added for authorization
-- Signature verifies token hasn't been tampered with
-
-### JWT Validation
-
-```java
-public Boolean validateToken(String token, String username) {
-    final String extractedUsername = extractUsername(token);
-    return (extractedUsername.equals(username) && !isTokenExpired(token));
-}
-
-public String extractUsername(String token) {
-    return extractAllClaims(token).getSubject();
-}
-
-private Claims extractAllClaims(String token) {
-    return Jwts.parser()
-            .verifyWith(getSigningKey())
-            .build()
-            .parseSignedClaims(token)
-            .getPayload();
-}
-
-private Boolean isTokenExpired(String token) {
-    return extractAllClaims(token).getExpiration().before(new Date());
-}
-```
+**Key Differences:**
+- **User Service**: Validates token AND checks username match (for re-authentication)
+- **API Gateway**: Only validates token expiration and signature (for authorization)
+- **Gateway** includes `extractRole()` method for role-based access control
+- **Gateway** uses generic `extractClaim()` helper for flexible claim extraction
 
 ### Authentication Flow
 
@@ -484,15 +551,20 @@ public class UserService {
             throw new RuntimeException("Account is inactive");
         }
 
+        // Publish event to Kafka
+        try {
+            Map<String, Object> event = new HashMap<>();
+            event.put("eventType", "USER_LOGGED_IN");
+            event.put("userId", user.getId());
+            event.put("username", user.getUsername());
+            kafkaTemplate.send("user-events", event);
+        } catch (Exception e) {
+            System.err.println("Failed to publish Kafka event: " + e.getMessage());
+        }
+
         // Generate JWT
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().toString());
         
-        // Publish event to Kafka
-        kafkaTemplate.send("user-events", Map.of(
-            "eventType", "USER_LOGGED_IN",
-            "userId", user.getId(),
-            "username", user.getUsername()
-        ));
 
         // Return response
         return new AuthResponse(token, user.getUsername(), user.getRole().toString(), user.getId());
