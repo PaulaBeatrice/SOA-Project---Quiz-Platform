@@ -49,25 +49,46 @@ public class JwtUtil {
     @Value("${jwt.expiration}")
     private Long expiration;
 
-    public String generateToken(String username, String role) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("role", role);
-        return createToken(claims, username);
-    }
-
-    private String createToken(Map<String, Object> claims, String subject) {
-        return Jwts.builder()
-                .claims(claims)
-                .subject(subject)
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(getSigningKey())
-                .compact();
-    }
-
     private SecretKey getSigningKey() {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    public Claims extractAllClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    public String extractRole(String token) {
+        return extractClaim(token, claims -> claims.get("role", String.class));
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    public Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    public Boolean validateToken(String token) {
+        try {
+            return !isTokenExpired(token);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
 ```
@@ -229,9 +250,9 @@ public class JwtAuthenticationFilter implements WebFilter {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        
-        // Skip auth for public endpoints
         String path = request.getPath().value();
+
+        // Skip authentication for public endpoints
         if (path.contains("/auth/") || path.contains("/health")) {
             return chain.filter(exchange);
         }
@@ -243,15 +264,58 @@ public class JwtAuthenticationFilter implements WebFilter {
 
             if (jwtUtil.validateToken(token)) {
                 String username = jwtUtil.extractUsername(token);
+                String role = jwtUtil.extractRole(token);
+
+                // Role-based path protection
+                if (!isAuthorized(path, role)) {
+                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                    return exchange.getResponse().setComplete();
+                }
+
                 UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(username, null, new ArrayList<>());
 
                 return chain.filter(exchange)
                     .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
+            } else {
+                // Invalid token
+                exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                return exchange.getResponse().setComplete();
             }
         }
 
-        return chain.filter(exchange);
+        // No token provided
+        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+        return exchange.getResponse().setComplete();
+    }
+
+    private boolean isAuthorized(String path, String role) {
+        if (role == null) {
+            return false;
+        }
+
+        // Analytics endpoints - only ADMIN and TEACHER
+        if (path.contains("/analytics-service") || path.contains("/analytics")) {
+            return role.equals("ADMIN") || role.equals("TEACHER");
+        }
+
+        // Admin-specific endpoints - only ADMIN
+        if (path.contains("/admin") || path.contains("/user-service/users")) {
+            return role.equals("ADMIN");
+        }
+
+        // Quiz management endpoints - ADMIN and TEACHER
+        if ((path.contains("/quiz-service") && (path.contains("/create") || path.contains("/update") || path.contains("/delete")))) {
+            return role.equals("ADMIN") || role.equals("TEACHER");
+        }
+
+        // Grading endpoints - ADMIN and TEACHER
+        if (path.contains("/grading") || path.contains("/submission-service/grade")) {
+            return role.equals("ADMIN") || role.equals("TEACHER");
+        }
+
+        // All other endpoints are accessible by all authenticated users
+        return true;
     }
 }
 ```
