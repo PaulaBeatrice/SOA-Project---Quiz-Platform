@@ -421,37 +421,6 @@ DELETE /api/admin/users/{id}
 PUT    /api/admin/settings
 ```
 
-### Implementation in Microservices
-
-While the gateway validates JWT signature, individual services can check specific roles:
-
-```java
-// Example in a service controller
-@RestController
-@RequestMapping("/api/analytics")
-public class AnalyticsController {
-    
-    // Accessible by any authenticated user
-    @GetMapping("/dashboard")
-    public ResponseEntity<?> getDashboard(@RequestHeader("Authorization") String token) {
-        // Gateway validates token before reaching here
-        // Service can extract role from authenticated context if needed
-        return ResponseEntity.ok(new DashboardData());
-    }
-    
-    // For fine-grained control (if service handles authorization):
-    @DeleteMapping("/admin/users/{id}")
-    public ResponseEntity<?> deleteUser(@PathVariable Long id) {
-        // Service could verify role from request context
-        // if (userRole != ADMIN) throw UnauthorizedException();
-        userService.deleteUser(id);
-        return ResponseEntity.ok().build();
-    }
-}
-```
-
-## Implementation Examples from Quiz Platform
-
 ### Complete Login Flow
 
 ```java
