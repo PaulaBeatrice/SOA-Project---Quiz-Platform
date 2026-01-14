@@ -472,22 +472,9 @@ The grading function is implemented using **Spring Cloud Function**, which provi
 │                                                                  │
 │  Option 1: Traditional Docker Container (Current)                │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │ Submission Service → RabbitMQ → Grading Function (Port 9000)│  │
-│  │                                  ↓                           │  │
-│  │                           Updates Submission                 │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  Option 2: AWS Lambda (Serverless)                               │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ Submission Service → AWS SQS → AWS Lambda Function          │  │
-│  │                                 (Auto-scales)                │  │
-│  │                                  ↓                           │  │
-│  │                           Updates via API                    │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  Option 3: HTTP Invocation (REST API)                            │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │ Any Service → POST /grade → Grading Function                │  │
+│  │Submission Service → RabbitMQ → Grading Function (Port 9000)│  │
+│  │                                  ↓                         │  │
+│  │                           Updates Submission               │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -563,138 +550,14 @@ public class GradingListener {
 }
 ```
 
-**2. AWS Lambda Deployment**
-
-The same function can be deployed to AWS Lambda using the adapter:
-
-```java
-// AWS Lambda Handler
-public class SimpleLambdaHandler extends FunctionInvoker {
-    // Spring Cloud Function automatically detects and invokes gradeSubmission bean
-}
-```
-
-**serverless.yml** (Serverless Framework configuration):
-```yaml
-service: quiz-grading-function
-
-provider:
-  name: aws
-  runtime: java17
-  memorySize: 512
-  timeout: 30
-
-functions:
-  gradeSubmission:
-    handler: org.example.grading.handler.SimpleLambdaHandler
-    events:
-      # Triggered by SQS (replaces RabbitMQ)
-      - sqs:
-          arn: !GetAtt GradingQueue.Arn
-          batchSize: 10
-      
-      # Also accessible via HTTP
-      - http:
-          path: /grade
-          method: post
-
-resources:
-  Resources:
-    GradingQueue:
-      Type: AWS::SQS::Queue
-      Properties:
-        QueueName: grading-queue
-        VisibilityTimeout: 60
-```
-
-**Deploy to AWS Lambda**:
-```bash
-# Build the function
-mvn clean package
-
-# Deploy using Serverless Framework
-serverless deploy --stage prod
-```
-
-**3. REST API Invocation**
-
-The function can also be invoked directly via HTTP:
-
-```java
-@RestController
-public class GradingController {
-    @Autowired
-    private GradingFunction gradingFunction;
-
-    @PostMapping("/grade")
-    public ResponseEntity<GradingResponse> grade(@RequestBody GradingRequest request) {
-        Function<GradingRequest, GradingResponse> function = gradingFunction.gradeSubmission();
-        GradingResponse response = function.apply(request);
-        return ResponseEntity.ok(response);
-    }
-}
-```
-
-#### Key FaaS Characteristics
-
-✅ **Single Responsibility**: Only grades quiz submissions  
-✅ **Event-Driven**: Triggered by RabbitMQ (Docker) or SQS (AWS Lambda)  
-✅ **Stateless**: No persistent state between invocations  
-✅ **Auto-Scaling**: In AWS Lambda, automatically scales based on queue depth  
-✅ **Pay-per-Use**: In serverless, you only pay for actual execution time  
-✅ **Platform-Agnostic**: Same code runs in Docker, AWS, Azure, or GCP  
-✅ **Isolated**: Independent deployment and versioning
-
-#### Message Flow
-
-```
-1. Student submits quiz → Submission Service
-2. Submission Service publishes GradingRequest to queue
-   - Docker: RabbitMQ queue
-   - AWS: SQS queue
-3. Grading Function receives message
-4. Function fetches quiz details from Quiz Service
-5. Function calculates score by comparing answers
-6. Function returns GradingResponse
-7. Result updates Submission Service via HTTP callback
-8. Notification sent to student via WebSocket
-```
-
-#### Data Models
-
-```java
-// Input
-public class GradingRequest {
-    private Long submissionId;
-    private Long quizId;
-    private Map<Long, String> answers; // questionId -> studentAnswer
-}
-
-// Output
-public class GradingResponse {
-    private Long submissionId;
-    private Integer score;
-    private Integer maxScore;
-    
-    public double getPercentage() {
-        return maxScore > 0 ? (score * 100.0) / maxScore : 0;
-    }
-}
-```
-
-#### Why This is True FaaS
-
-1. **Function-Oriented Design**: Core logic is a pure `Function<I, O>` with no framework coupling
-2. **Multiple Invocation Methods**: Can be triggered via queue, HTTP, or direct invocation
-3. **Serverless-Ready**: Works with AWS Lambda, Azure Functions, Google Cloud Functions
-4. **Ephemeral Execution**: No long-running processes, only executes when triggered
-5. **Independent Scaling**: Can scale independently of other microservices
-6. **Cloud-Native**: Built with Spring Cloud Function for cloud platform portability
-
+**Single Responsibility**: Only grades quiz submissions  
+**Event-Driven**: Triggered by RabbitMQ (Docker)
 ---
 
 ###  **Web App with Server-Side Notifications ** 
-
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureMessageBroker(MessageBrokerRegistry config) {
         config.enableSimpleBroker("/topic", "/queue");
         config.setApplicationDestinationPrefixes("/app");
@@ -900,12 +763,6 @@ QuizPlatform/
 │ + isTeacher(): Boolean                  │
 │ + isAdmin(): Boolean                    │
 │ + validatePassword(raw): Boolean        │
-└─────────────────────────────────────────┘
-         △
-         │ implements
-         │
-┌─────────────────────────────────────────┐
-│      UserDetails (Spring Security)      │
 └─────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────┐
