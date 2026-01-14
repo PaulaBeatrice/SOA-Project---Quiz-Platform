@@ -84,13 +84,13 @@ A quiz platform demonstrating microservices architecture
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │              Data & Messaging Infrastructure                   │  │
 │  │                                                                │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌───────────────┐                  │  │
-│  │  │PostgreSQL│  │ MongoDB  │  │   RabbitMQ    │                  │  │
-│  │  │(5432)    │  │(27017)   │  │   (5672)      │                  │  │
-│  │  │          │  │          │  │               │                  │  │
-│  │  │ - Users  │  │ - Quiz   │  │ - Grading Q   │                  │  │
-│  │  │ - Submis.│  │ - Analyt.│  │ - Notifications│                 │  │
-│  │  └──────────┘  └──────────┘  └───────────────┘                  │  │
+│  │  ┌──────────┐  ┌──────────┐  ┌───────────────┐                 │  │
+│  │  │PostgreSQL│  │ MongoDB  │  │   RabbitMQ    │                 │  │
+│  │  │(5432)    │  │(27017)   │  │   (5672)      │                 │  │
+│  │  │          │  │          │  │               │                 │  │
+│  │  │ - Users  │  │ - Quiz   │  │ - Grading Q   │                 │  │
+│  │  │ - Submis.│  │ - Analyt.│  │ - Notifications│                │  │
+│  │  └──────────┘  └──────────┘  └───────────────┘                 │  │
 │  │                                                                │  │
 │  │  ┌──────────────────────────────────────────────────────────┐  │  │
 │  │  │     Kafka + Zookeeper (Event Streaming)                  │  │  │
@@ -746,159 +746,19 @@ QuizPlatform/
 
 ### User Domain Model
 
-```
-┌─────────────────────────────────────────┐
-│             User (Entity)               │
-├─────────────────────────────────────────┤
-│ - id: Long                              │
-│ - username: String (unique)             │
-│ - email: String (unique)                │
-│ - password: String                      │
-│ - role: UserRole (ENUM)                 │
-│ - createdAt: LocalDateTime              │            
-├─────────────────────────────────────────┤
-│ + getId(): Long                         │
-│ + getFullName(): String                 │
-│ + isStudent(): Boolean                  │
-│ + isTeacher(): Boolean                  │
-│ + isAdmin(): Boolean                    │
-│ + validatePassword(raw): Boolean        │
-└─────────────────────────────────────────┘
-
-┌─────────────────────────────────────────┐
-│    <<Enumeration>> UserRole             │
-├─────────────────────────────────────────┤
-│ STUDENT                                 │
-│ TEACHER                                 │
-│ ADMIN                                   │
-└─────────────────────────────────────────┘
-```
+![User Domain Model](diagrams/UML_Diagram_User.png)
 
 ### Quiz Domain Model
 
-```
-┌─────────────────────────────────────────┐
-│           Quiz (Entity)                 │
-├─────────────────────────────────────────┤
-│ - id: Long                              │
-│ - title: String                         │
-│ - description: String                   │
-│ - createdBy: Long (userId, FK)          │
-│ - timeLimit: Integer (minutes)          │
-│ - passingScore: Integer                 │
-│ - createdAt: LocalDateTime              │
-│ - questions: List<Question>             │
-├─────────────────────────────────────────┤
-│ + addQuestion(q): void                  │
-│ + removeQuestion(id): void              │
-│ + getTotalPoints(): Integer             │
-│ + validateQuiz(): Result                │
-│ + publish(): void                       │
-│ + canBeEdited(): Boolean                │
-└─────────────────────────────────────────┘
-         │
-         │ contains (1..*)
-         ▼
-┌─────────────────────────────────────────┐
-│        Question (Entity)                │
-├─────────────────────────────────────────┤
-│ - id: Long                              │
-│ - quizId: Long (FK)                     │
-│ - text: String                          │
-│ - questionType: QuestionType            │
-│ - options: List<String>                 │
-│ - correctAnswers: List<String>          │
-│ - points: Integer                       │
-│ - correctOptionIndex: Integer           │
-├─────────────────────────────────────────┤
-│ + isAnswerCorrect(ans): Boolean         │
-└─────────────────────────────────────────┘
-
-┌─────────────────────────────────────────┐
-│  <<Enumeration>> QuestionType           │
-├─────────────────────────────────────────┤
-│ MULTIPLE_CHOICE                         │
-│ SHORT_ANSWER                            │
-│ TRUE_FALSE                              │
-└─────────────────────────────────────────┘
-```
+![Quiz Domain Model](diagrams/UML_Diagram_Quiz.png)
 
 ### Submission & Grading Model
 
-```
-┌────────────────────────────────────────────────┐
-│         Submission (Entity)                    │
-├────────────────────────────────────────────────┤
-│ - id: Long                                     │
-│ - quizId: Long (FK)                            │
-│ - userId: Long (FK)                            │
-│ - answers: Map<Long, String> [questionId->ans] │
-│ - score: Integer                               │
-│ - maxScore: Integer                            │
-│ - status: SubmissionStatus (ENUM)              │
-│ - startedAt: LocalDateTime                     │
-│ - submittedAt: LocalDateTime                   │
-│ - gradedAt: LocalDateTime                      │
-├────────────────────────────────────────────────┤
-│ + getPercentage(): Double                      │
-│ + isPassed(passingScore): Boolean              │
-│ + submit(): void                               │
-│ + grade(score, feedback): void                 │
-└────────────────────────────────────────────────┘
-         │
-         │ triggers
-         ▼
-┌────────────────────────────────────────────────┐
-│      GradingRequest (Message)                  │
-├────────────────────────────────────────────────┤
-│ - submissionId: Long                           │
-│ - quizId: Long                                 │
-│ - userId: Long                                 │
-│ - answers: Map<Long, String>                   │
-├────────────────────────────────────────────────┤
-│ + hasAllAnswers(): Boolean                     │
-└────────────────────────────────────────────────┘
-         │
-         │ produces
-         ▼
-┌────────────────────────────────────────────────┐
-│      GradingResponse (Message)                 │
-├────────────────────────────────────────────────┤
-│ - submissionId: Long                           │
-│ - score: Integer                               │
-│ - maxScore: Integer                            │
-├────────────────────────────────────────────────┤
-│ + getPercentage(): Double                      │
-│ + isPassed(): Boolean                          │
-└────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────┐
-│  <<Enumeration>> SubmissionStatus       │
-├─────────────────────────────────────────┤
-│ STARTED                                 │
-│ SUBMITTED                               │
-│ GRADED                                  │
-└─────────────────────────────────────────┘
-```
+![Submission & Grading Model](diagrams/UML_Diagram_Submission.png)
 
 ### Service Architecture Model
 
-```
-┌───────────────────────────────────────────────┐
-│         QuizService (Service)                 │
-├───────────────────────────────────────────────┤
-│ - quizRepository: QuizRepository              │
-│ - questionRepository: QuestionRepository      │
-| - kafkaTemplate: KafkaTemplate<String, Object>|
-| - rabbitTemplate: RabbitTemplate              |
-├───────────────────────────────────────────────┤
-│ + createQuiz(quiz): Quiz                      │
-│ + updateQuiz(id, quiz): Quiz                  │
-│ + deleteQuiz(id): void                        │
-│ + getQuizById(id): Quiz                       │
-│ + getAllQuizzes(): List<Quiz>                 │
-└───────────────────────────────────────────────┘
-```
+![Service Architecture Model](diagrams/Service_Architecture_Model.png)
 
 ---
 
